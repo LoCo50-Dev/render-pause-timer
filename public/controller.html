@@ -1,22 +1,22 @@
 <!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><title>Controller</title></head>
-<body style="font-family:Arial">
-  <h2>Pause starten</h2>
-  <input type="number" id="minutes" min="1" max="120" value="5">
-  <button onclick="setTimer()">Start</button>
-
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<title>Timer Controller</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <div class="medium">Pause-Zeit eingeben (Minuten):</div>
+  <input type="number" id="minutes" min="1" max="120" value="20"/>
+  <div class="button-row">
+    <button id="pauseBtn" onclick="togglePause()" disabled>Pause</button>
+    <button id="startBtn" onclick="startTimer()">Start</button>
+  </div>
+</div>
+<script src="script.js"></script>
 <script>
-async function setTimer(){
-  const mins = Number(document.getElementById("minutes").value);
-  await fetch("/start", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({minutes: mins})
-  });
-  alert("Timer gestartet");
-}
+startController();
 </script>
 </body>
 </html>
-
