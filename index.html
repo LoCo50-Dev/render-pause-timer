@@ -2,14 +2,13 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8"/>
-<title>Pausen-Timer</title>
+<title>Pausen-Timer Overlay</title>
 <style>
 body { display:flex; flex-direction:column; justify-content:center; align-items:center;
       background:black; color:white; font-family:Arial; text-align:center;}
 .container{max-width:600px;}
 #progress{width:100%;height:20px;background:#333;border-radius:10px;margin-top:10px;}
 #bar{height:100%;width:0;background:#00ff83;border-radius:10px;transition:width 1s linear;}
-input,button{padding:10px;margin:5px;}
 .hidden{display:none;}
 .big{font-size:48px;font-weight:bold;}
 .medium{font-size:24px;}
@@ -17,48 +16,45 @@ input,button{padding:10px;margin:5px;}
 </head>
 <body>
 <div class="container">
-  <div id="setup">
-    <div class="medium">Pause-Zeit eingeben (Minuten):</div>
-    <input type="number" id="minutes" min="1" max="120" value="5"/>
-    <button onclick="startTimer()">Start</button>
-  </div>
-
-  <div id="display" class="hidden">
+  <div id="display">
     <div class="medium" id="infoText"></div>
     <div class="big" id="countdown"></div>
-
     <div id="progress"><div id="bar"></div></div>
-
     <div class="medium" id="returnTime"></div>
   </div>
 </div>
 
 <script>
-let totalMs, endTime;
-function startTimer(){
-  const mins = Number(document.getElementById("minutes").value);
-  totalMs = mins * 60000;
-  endTime = Date.now() + totalMs;
+let totalMs = 0;
+let endTime = 0;
 
-  document.getElementById("setup").classList.add("hidden");
-  document.getElementById("display").classList.remove("hidden");
+async function fetchState() {
+  const res = await fetch("/state");
+  const data = await res.json();
+  endTime = data.endTime;
+  totalMs = data.totalMs;
+}
 
-  document.getElementById("infoText").innerText = `In ${mins} Minuten geht’s weiter`;
-  const rt = new Date(endTime);
-  document.getElementById("returnTime").innerText = 
-    `Weiter um: ${rt.getHours().toString().padStart(2,"0")}:${rt.getMinutes().toString().padStart(2,"0")} Uhr`;
-
+async function start() {
+  await fetchState();
+  if (!endTime) {
+    document.getElementById("countdown").innerText = "";
+    return;
+  }
   tick();
 }
+
 function tick(){
   const now = Date.now();
   const left = Math.max(0, endTime - now);
-
   const mins = Math.floor(left / 60000);
   const secs = Math.floor((left % 60000) / 1000);
-
   document.getElementById("countdown").innerText = `${mins}:${secs.toString().padStart(2,"0")}`;
   document.getElementById("bar").style.width = `${100 - (left/totalMs * 100)}%`;
+
+  const rt = new Date(endTime);
+  document.getElementById("returnTime").innerText =
+    `Weiter um: ${rt.getHours().toString().padStart(2,"0")}:${rt.getMinutes().toString().padStart(2,"0")} Uhr`;
 
   if(left > 0){
     requestAnimationFrame(tick);
@@ -66,6 +62,9 @@ function tick(){
     document.getElementById("countdown").innerText = "Gleich geht’s weiter!";
   }
 }
+
+start();
+setInterval(fetchState, 5000);
 </script>
 </body>
 </html>
