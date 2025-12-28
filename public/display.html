@@ -1,1 +1,117 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pause Timer Display</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      background: transparent;
+      font-family: Arial, sans-serif;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .timer-container {
+      text-align: center;
+      width: 100%;
+      max-width: 600px;
+    }
+    
+    .countdown {
+      font-size: 72px;
+      font-weight: bold;
+      margin-bottom: 20px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    }
+    
+    .progress-container {
+      width: 100%;
+      height: 30px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 15px;
+      overflow: hidden;
+      margin-bottom: 15px;
+    }
+    
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #4CAF50, #8BC34A);
+      transition: width 0.3s ease;
+      border-radius: 15px;
+    }
+    
+    .end-time {
+      font-size: 24px;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+  <div class="timer-container">
+    <div class="countdown" id="countdown">Stream beginnt in Kürze</div>
+    <div class="progress-container">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div class="end-time" id="endTime">Pause wurde übersprungen</div>
+  </div>
 
+  <script>
+    const API_URL = window.location.origin;
+    
+    function formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    function formatEndTime(timestamp) {
+      const date = new Date(timestamp);
+      const hours = date.getHours().toString().padStart(2, '0');
+      const mins = date.getMinutes().toString().padStart(2, '0');
+      return `${hours}:${mins} Uhr`;
+    }
+    
+    async function updateDisplay() {
+      try {
+        const res = await fetch(`${API_URL}/api/state`);
+        const state = await res.json();
+        
+        const countdown = document.getElementById('countdown');
+        const progressBar = document.getElementById('progressBar');
+        const endTime = document.getElementById('endTime');
+        
+        if (!state.isRunning || state.remaining <= 0) {
+          countdown.textContent = 'Stream beginnt in Kürze';
+          progressBar.style.width = '0%';
+          endTime.textContent = state.wasSkipped ? 'Pause wurde übersprungen' : '';
+        } else {
+          countdown.textContent = formatTime(state.remaining);
+          
+          const progress = ((state.duration - state.remaining) / state.duration) * 100;
+          progressBar.style.width = `${progress}%`;
+          
+          if (state.endTime) {
+            endTime.textContent = `Endet um ${formatEndTime(state.endTime)}`;
+          }
+        }
+      } catch (err) {
+        console.error('Fehler beim Laden:', err);
+      }
+    }
+    
+    setInterval(updateDisplay, 100);
+    updateDisplay();
+  </script>
+</body>
+</html>
