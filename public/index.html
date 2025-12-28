@@ -2,60 +2,19 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8"/>
-<title>Overlay – Timer</title>
-<style>
-body { display:flex; justify-content:center; align-items:center; flex-direction:column;
-       height:100vh; margin:0; background:black; color:white; font-family:Arial; }
-.hidden{display:none;}
-.big{font-size:64px;font-weight:bold;}
-.medium{font-size:28px;}
-#progress{width:80%;height:18px;background:#333;border-radius:10px;margin-top:15px;}
-#bar{height:100%;width:0;background:#00ff83;border-radius:10px;transition:width 1s linear;}
-</style>
+<title>Pausen-Timer</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="display">
-  <div class="medium" id="infoText">– Timer nicht gestartet –</div>
-  <div class="big" id="countdown"></div>
-  <div id="progress"><div id="bar"></div></div>
-  <div class="medium" id="returnTime"></div>
+<div class="container">
+    <div id="display">
+        <div class="big" id="countdown">0:00</div>
+        <div class="medium" id="returnTime">End: --:--</div>
+    </div>
 </div>
-
+<script src="script.js"></script>
 <script>
-let totalMs = 0;
-let endTime = 0;
-
-// Poll API
-async function poll(){
-  const r = await fetch("/state");
-  const data = await r.json();
-
-  if(data.running){
-    totalMs = data.duration;
-    endTime = data.end;
-    tick();
-  } else {
-    document.getElementById("infoText").textContent = "– Timer nicht gestartet –";
-    document.getElementById("countdown").textContent = "";
-    document.getElementById("bar").style.width = "0%";
-    document.getElementById("returnTime").textContent = "";
-  }
-}
-setInterval(poll,1000);
-
-function tick(){
-  const left = Math.max(0, endTime - Date.now());
-  const mins = Math.floor(left/60000);
-  const secs = Math.floor((left%60000)/1000);
-
-  document.getElementById("infoText").textContent = `In ${Math.ceil(totalMs/60000)} Min geht’s weiter`;
-  document.getElementById("countdown").textContent = `${mins}:${secs.toString().padStart(2,"0")}`;
-  document.getElementById("bar").style.width = `${100 - (left/totalMs * 100)}%`;
-
-  if(left<=0){
-    document.getElementById("countdown").textContent = "Gleich geht’s weiter!";
-  }
-}
+startOverlay();
 </script>
 </body>
 </html>
