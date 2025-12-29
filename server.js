@@ -97,6 +97,18 @@ const VIDEO_INTERVAL = 10 * 60 * 1000;
 
 // ===== AUTHENTICATION =====
 
+// Get instance info (no auth required - just tells which instance this is)
+app.get('/api/instance/info', (req, res) => {
+  const currentUser = getCurrentUser();
+  const totpSecret = getTotpSecretForCurrentUser();
+  
+  res.json({
+    ytId: YT_ID,
+    userName: currentUser.name,
+    authRequired: !!totpSecret
+  });
+});
+
 app.post('/api/auth/verify', (req, res) => {
   const { code, sessionId } = req.body;
   const currentUser = getCurrentUser();
