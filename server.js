@@ -5,9 +5,9 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static('public'));
 
-// Spotify API Configuration - FÜGE HIER DEINE CREDENTIALS EIN!
-const SPOTIFY_CLIENT_ID = 'DEINE_CLIENT_ID_HIER';
-const SPOTIFY_CLIENT_SECRET = 'DEIN_CLIENT_SECRET_HIER';
+// Spotify API Configuration - NUTZT ENVIRONMENT VARIABLES!
+const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
+const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 const REDIRECT_URI = 'https://lc5-streamdesk.onrender.com/callback';
 
 // In-Memory State
