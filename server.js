@@ -17,7 +17,8 @@ let timerState = {
   endTime: null,
   isPaused: false,
   isRunning: false,
-  wasSkipped: false
+  wasSkipped: false,
+  language: 'de'
 };
 
 let spotifyState = {
@@ -47,7 +48,8 @@ app.post('/api/reset', (req, res) => {
     endTime: null,
     isPaused: false,
     isRunning: false,
-    wasSkipped: false
+    wasSkipped: false,
+    language: timerState.language || 'de'
   };
   res.json(timerState);
 });
