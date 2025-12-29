@@ -10,26 +10,25 @@ app.use(express.static('public'));
 
 // ===== USER CONFIGURATION =====
 // Füge hier neue User hinzu. Jeder User braucht:
-// - id: Eindeutiger Code (wird für Ordner verwendet)
-// - name: Anzeigename
-// - ytId: Verschlüsselter Code für externe Systeme
+// - id: Eindeutiger Code (wird für Ordner verwendet, z.B. "SD-A98DB")
+// - name: Anzeigename (wird im UI angezeigt, z.B. "@ExplorerLoCo50")
+// - ytId: Wird automatisch aus process.env.YT_ID geladen
 const USERS = [
   {
     id: 'SD-A98DB',
     name: '@ExplorerLoCo50',
-    ytId: 'ABC123XYZ'
-  }
-const USERS = [
+    ytId: process.env.YT_ID || 'none'
+  },
   {
     id: 'none',
-    name: 'guest',
-    ytId: 'ABC123XYZ'
+    name: 'Guest',
+    ytId: 'none'
   }
   // Weitere User hier hinzufügen:
   // {
-  //   id: 'USER002',
-  //   name: 'AnotherStreamer',
-  //   ytId: 'DEF456UVW'
+  //   id: 'SD-XYZ123',
+  //   name: '@AnotherStreamer',
+  //   ytId: process.env.YT_ID || 'none'
   // }
 ];
 
@@ -40,13 +39,13 @@ const AUTH_DISABLED = TOTP_SECRET === 'NONE';
 // Spotify API Configuration
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
-const REDIRECT_URI = 'https://lc5-streamdesk.onrender.com/callback';
+const REDIRECT_URI = process.env.REDIRECT_URI || 'https://lc5-streamdesk.onrender.com/callback';
 
-// Session Store with user info
-const activeSessions = new Map(); // sessionId -> userId
+// Session Store
+const activeSessions = new Map();
 
 // In-Memory State (per user)
-const userStates = new Map(); // userId -> state
+const userStates = new Map();
 
 function getUserState(userId) {
   if (!userStates.has(userId)) {
@@ -85,45 +84,22 @@ const VIDEO_INTERVAL = 10 * 60 * 1000;
 
 // ===== AUTHENTICATION =====
 
-// Get user list
-app.get('/api/users', (req, res) => {
-  res.json({
-    users: USERS.map(u => ({ id: u.id, name: u.name })),
-    authDisabled: AUTH_DISABLED
-  });
-});
-
-// Get user info by ID
-app.get('/api/user/:userId', (req, res) => {
-  const user = USERS.find(u => u.id === req.params.userId);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
-  res.json({
-    id: user.id,
-    name: user.name,
-    ytId: user.ytId
-  });
-});
-
 // Verify TOTP Code
 app.post('/api/auth/verify', (req, res) => {
-  const { code, sessionId, userId } = req.body;
+  const { code, sessionId } = req.body;
   
-  // Check if user exists
-  const user = USERS.find(u => u.id === userId);
-  if (!user) {
-    return res.json({ success: false, error: 'Invalid user' });
-  }
-  
-  // If auth is disabled, auto-approve
+  // If auth is disabled, auto-approve with YT_ID user
   if (AUTH_DISABLED) {
-    activeSessions.set(sessionId, userId);
-    return res.json({ success: true, user: { id: user.id, name: user.name, ytId: user.ytId } });
+    const ytId = process.env.YT_ID || 'none';
+    const user = USERS.find(u => u.ytId === ytId) || USERS.find(u => u.id === 'none');
+    activeSessions.set(sessionId, user.id);
+    return res.json({ 
+      success: true, 
+      user: { id: user.id, name: user.name, ytId: user.ytId } 
+    });
   }
   
   console.log('=== AUTH ATTEMPT ===');
-  console.log('User:', userId);
   console.log('Received code:', code);
   
   if (!TOTP_SECRET) {
@@ -142,8 +118,13 @@ app.post('/api/auth/verify', (req, res) => {
   console.log('===================');
   
   if (verified) {
-    activeSessions.set(sessionId, userId);
-    res.json({ success: true, user: { id: user.id, name: user.name, ytId: user.ytId } });
+    const ytId = process.env.YT_ID || 'none';
+    const user = USERS.find(u => u.ytId === ytId) || USERS.find(u => u.id === 'none');
+    activeSessions.set(sessionId, user.id);
+    res.json({ 
+      success: true, 
+      user: { id: user.id, name: user.name, ytId: user.ytId } 
+    });
   } else {
     res.json({ success: false, error: 'Invalid code' });
   }
@@ -153,17 +134,32 @@ app.post('/api/auth/verify', (req, res) => {
 app.post('/api/auth/check', (req, res) => {
   const { sessionId } = req.body;
   
-  // If auth is disabled, always return invalid to force re-login
-  if (AUTH_DISABLED) {
-    return res.json({ valid: false });
+  // Sessions expire on every new page load - always return invalid
+  res.json({ valid: false });
+});
+
+// Get current user info
+app.get('/api/auth/user', (req, res) => {
+  const sessionId = req.headers['x-session-id'];
+  
+  if (!sessionId) {
+    return res.status(401).json({ error: 'No session' });
   }
   
   const userId = activeSessions.get(sessionId);
+  if (!userId) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+  
   const user = USERS.find(u => u.id === userId);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
   
   res.json({
-    valid: !!user,
-    user: user ? { id: user.id, name: user.name, ytId: user.ytId } : null
+    id: user.id,
+    name: user.name,
+    ytId: user.ytId
   });
 });
 
@@ -485,6 +481,7 @@ app.get('/api/spotify/state', getUserFromSession, (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Auth mode: ${AUTH_DISABLED ? 'DISABLED' : 'ENABLED'}`);
-  console.log(`Registered users: ${USERS.map(u => u.name).join(', ')}`);
+  console.log(`Auth mode: ${AUTH_DISABLED ? 'DISABLED (TOTP_SECRET=NONE)' : 'ENABLED'}`);
+  console.log(`YT_ID from env: ${process.env.YT_ID || 'none'}`);
+  console.log(`Registered users: ${USERS.map(u => `${u.name} (${u.id})`).join(', ')}`);
 });
