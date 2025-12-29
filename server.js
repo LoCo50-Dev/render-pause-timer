@@ -139,6 +139,13 @@ function getUserFromSession(req, res, next) {
 
 // ===== TIMER STATE =====
 
+// Public endpoint for countdown display (no auth required)
+app.get('/api/state/public/:userId', (req, res) => {
+  const userId = req.params.userId;
+  const state = getUserState(userId);
+  res.json(state.timer);
+});
+
 app.get('/api/state', getUserFromSession, (req, res) => {
   const state = getUserState(req.userId);
   res.json(state.timer);
@@ -268,6 +275,40 @@ setInterval(() => {
 }, 60 * 1000);
 
 // ===== SPOTIFY =====
+
+// Public endpoint for music visualizer
+app.get('/api/spotify/current/public/:userId', async (req, res) => {
+  const state = getUserState(req.params.userId);
+  
+  if (!state.spotify.accessToken) {
+    return res.json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+      headers: { 'Authorization': 'Bearer ' + state.spotify.accessToken }
+    });
+
+    if (response.status === 204) {
+      return res.json({ isPlaying: false });
+    }
+
+    const data = await response.json();
+    state.spotify.currentTrack = {
+      name: data.item?.name,
+      artist: data.item?.artists[0]?.name,
+      album: data.item?.album?.name,
+      cover: data.item?.album?.images[0]?.url,
+      duration: data.item?.duration_ms,
+      progress: data.progress_ms
+    };
+    state.spotify.isPlaying = data.is_playing;
+
+    res.json(state.spotify.currentTrack);
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
 
 app.get('/spotify/login', getUserFromSession, (req, res) => {
   const scopes = 'user-read-playback-state user-modify-playback-state user-read-currently-playing';
