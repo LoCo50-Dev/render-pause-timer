@@ -76,6 +76,10 @@
   <script>
     const API_URL = window.location.origin;
     
+    // Get userId from URL parameter or use default from YT_ID env
+    const urlParams = new URLSearchParams(window.location.search);
+    const userId = urlParams.get('user') || 'SD-A98DB'; // Default to first user
+    
     const translations = {
       de: {
         starting: 'Stream beginnt in Kürze',
@@ -106,9 +110,7 @@
     
     async function updateDisplay() {
       try {
-        const res = await fetch(`${API_URL}/api/state`, {
-          headers: { 'X-Session-Id': 'public-display' }
-        });
+        const res = await fetch(`${API_URL}/api/state/public/${userId}`);
         const state = await res.json();
         
         currentLanguage = state.language || 'de';
