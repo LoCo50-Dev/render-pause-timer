@@ -12,29 +12,35 @@ app.use(express.static('public'));
 const USERS = [
   {
     id: 'SD-A98DB',
-    name: '@ExplorerLoCo50'
+    name: '@ExplorerLoCo50',
+    totpSecret: process.env.TOTP_SECRET_USER1 || null
   },
   {
     id: 'SD-X69MM',          
-    name: '@mevm_yt'  
+    name: '@mevm_yt',
+    totpSecret: process.env.TOTP_SECRET_USER2 || null
   },
   {
     id: 'SD-H6RSG',          
-    name: '@R34dySethG0'   
+    name: '@R34dySethG0',
+    totpSecret: process.env.TOTP_SECRET_USER3 || null
   },
   {
     id: 'none',
-    name: 'Guest'
+    name: 'Guest',
+    totpSecret: null
   }
 ];
 
-const TOTP_SECRET = process.env.TOTP_SECRET;
-const AUTH_DISABLED = TOTP_SECRET === 'NONE';
-const YT_ID = process.env.YT_ID || 'none';
+const YT_ID = process.env.YT_ID || 'SD-A98DB';
 
 function getCurrentUser() {
   const user = USERS.find(u => u.id === YT_ID);
   return user || USERS.find(u => u.id === 'none');
+}
+
+function getUserById(userId) {
+  return USERS.find(u => u.id === userId) || USERS.find(u => u.id === 'none');
 }
 
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
@@ -84,7 +90,14 @@ app.post('/api/auth/verify', (req, res) => {
   const { code, sessionId } = req.body;
   const currentUser = getCurrentUser();
   
-  if (AUTH_DISABLED) {
+  console.log('=== AUTH ATTEMPT ===');
+  console.log('Received code:', code);
+  console.log('Current user:', currentUser.name, '(', currentUser.id, ')');
+  console.log('TOTP Secret:', currentUser.totpSecret ? 'SET' : 'NOT SET');
+  
+  // Check if auth is disabled for this specific user
+  if (!currentUser.totpSecret || currentUser.totpSecret === 'NONE') {
+    console.log('Auth disabled for this user - auto-login');
     activeSessions.set(sessionId, currentUser.id);
     return res.json({ 
       success: true, 
@@ -92,17 +105,9 @@ app.post('/api/auth/verify', (req, res) => {
     });
   }
   
-  console.log('=== AUTH ATTEMPT ===');
-  console.log('Received code:', code);
-  console.log('Current user:', currentUser.name, '(', currentUser.id, ')');
-  
-  if (!TOTP_SECRET) {
-    console.log('ERROR: TOTP_SECRET not set');
-    return res.json({ success: false, error: 'Server not configured' });
-  }
-  
+  // Verify TOTP code
   const verified = speakeasy.totp.verify({
-    secret: TOTP_SECRET,
+    secret: currentUser.totpSecret,
     encoding: 'base32',
     token: code,
     window: 6
@@ -454,9 +459,13 @@ app.get('/api/spotify/state', getUserFromSession, (req, res) => {
 });
 
 app.listen(PORT, () => {
+  const currentUser = getCurrentUser();
   console.log(`Server running on port ${PORT}`);
-  console.log(`Auth mode: ${AUTH_DISABLED ? 'DISABLED (TOTP_SECRET=NONE)' : 'ENABLED'}`);
   console.log(`YT_ID from env: ${YT_ID}`);
-  console.log(`Current user: ${getCurrentUser().name} (${getCurrentUser().id})`);
-  console.log(`All users: ${USERS.map(u => `${u.name} (${u.id})`).join(', ')}`);
+  console.log(`Current user: ${currentUser.name} (${currentUser.id})`);
+  console.log(`Auth for ${currentUser.name}: ${currentUser.totpSecret ? 'ENABLED' : 'DISABLED (NONE)'}`);
+  console.log(`\nAll users:`);
+  USERS.forEach(u => {
+    console.log(`  - ${u.name} (${u.id}) - Auth: ${u.totpSecret ? 'ENABLED' : 'DISABLED'}`);
+  });
 });
