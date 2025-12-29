@@ -1018,11 +1018,9 @@
           headers: getHeaders(),
           body: JSON.stringify(data)
         });
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await loadState();
+        isUpdating = false;
       } catch (err) {
         console.error('Update state error:', err);
-      } finally {
         isUpdating = false;
       }
     }
@@ -1032,26 +1030,25 @@
       isUpdating = true;
       const minutes = parseInt(document.getElementById('timeInput').value) || 5;
       const seconds = minutes * 60;
-      const now = Date.now();
       
       try {
+        const startTime = Date.now();
         await fetch(`${API_URL}/api/state`, {
           method: 'POST',
           headers: getHeaders(),
           body: JSON.stringify({
             duration: seconds,
             remaining: seconds,
-            endTime: now + (seconds * 1000),
+            endTime: startTime + (seconds * 1000),
             isPaused: false,
             isRunning: true,
-            wasSkipped: false
+            wasSkipped: false,
+            lastUpdateTime: startTime
           })
         });
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await loadState();
+        isUpdating = false;
       } catch (err) {
         console.error('Start timer error:', err);
-      } finally {
         isUpdating = false;
       }
     });
@@ -1073,11 +1070,9 @@
             isPaused: !currentState.isPaused
           })
         });
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await loadState();
+        isUpdating = false;
       } catch (err) {
         console.error('Pause timer error:', err);
-      } finally {
         isUpdating = false;
       }
     });
@@ -1091,11 +1086,9 @@
           method: 'POST',
           headers: getHeaders()
         });
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await loadState();
+        isUpdating = false;
       } catch (err) {
         console.error('Reset timer error:', err);
-      } finally {
         isUpdating = false;
       }
     });
@@ -1203,10 +1196,9 @@
             selectedVideos: selectedVideos
           })
         });
-        await new Promise(resolve => setTimeout(resolve, 100));
+        isUpdating = false;
       } catch (err) {
         console.error('Toggle popup error:', err);
-      } finally {
         isUpdating = false;
       }
     });
@@ -1223,10 +1215,9 @@
             selectedVideos: selectedVideos
           })
         });
-        await new Promise(resolve => setTimeout(resolve, 100));
+        isUpdating = false;
       } catch (err) {
         console.error('Update popup videos error:', err);
-      } finally {
         isUpdating = false;
       }
     }
