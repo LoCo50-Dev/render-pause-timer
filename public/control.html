@@ -30,7 +30,6 @@
       min-height: 100vh;
     }
     
-    /* LOGIN SCREEN */
     .login-screen {
       background: #2a2a2a;
       border-radius: 15px;
@@ -87,6 +86,11 @@
       background: #45a049;
     }
     
+    .btn-login:disabled {
+      background: #666;
+      cursor: not-allowed;
+    }
+    
     .error-message {
       color: #f44336;
       margin-top: 10px;
@@ -98,7 +102,6 @@
       display: block;
     }
     
-    /* USER PROFILE BOX */
     .user-profile-box {
       position: fixed;
       top: 20px;
@@ -112,21 +115,8 @@
       border-radius: 18px;
       background: linear-gradient(
         90deg,
-        #ff0000,
-        #ff7f00,
-        #ffff00,
-        #00ff00,
-        #0000ff,
-        #4b0082,
-        #9400d3,
-        #ff0000,
-        #ff7f00,
-        #ffff00,
-        #00ff00,
-        #0000ff,
-        #4b0082,
-        #9400d3,
-        #ff0000
+        #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3,
+        #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000
       );
       background-size: 300% 100%;
       animation: rainbow-flow 15s linear infinite;
@@ -142,12 +132,8 @@
     }
     
     @keyframes rainbow-flow {
-      0% {
-        background-position: 0% 0%;
-      }
-      100% {
-        background-position: 300% 0%;
-      }
+      0% { background-position: 0% 0%; }
+      100% { background-position: 300% 0%; }
     }
     
     .user-avatar {
@@ -164,7 +150,6 @@
       color: white;
     }
     
-    /* MAIN CONTAINER */
     .container {
       display: flex;
       flex-direction: column;
@@ -191,7 +176,6 @@
       padding: 8px 12px;
     }
     
-    /* SPOTIFY PANEL */
     .spotify-panel {
       border: 2px solid #0d5c1f;
       transition: border-color 0.5s ease;
@@ -201,7 +185,6 @@
       border-color: #1DB954;
     }
     
-    /* TIMER PANEL */
     .timer-panel {
       border: 2px solid #1a3a52;
       transition: border-color 0.5s ease;
@@ -211,13 +194,11 @@
       border-color: #00BCD4;
     }
     
-    /* LANGUAGE PANEL */
     .language-panel {
       border: 2px solid #FF9800;
       padding: 11px;
     }
     
-    /* POP-UP PANEL */
     .popup-panel {
       border: 2px solid #4a1a5c;
       transition: border-color 0.5s ease;
@@ -313,25 +294,12 @@
       opacity: 0;
     }
     
-    h1 {
-      display: none;
-    }
-    
     .preview {
       background: #1a1a1a;
       padding: 15px;
       border-radius: 10px;
       margin-bottom: 20px;
       text-align: center;
-    }
-    
-    .spotify-section {
-      margin-bottom: 20px;
-    }
-    
-    .spotify-status {
-      text-align: center;
-      margin-bottom: 15px;
     }
     
     .btn-spotify-connect {
@@ -521,7 +489,6 @@
       background: #da190b;
     }
     
-    /* Toggle Switch */
     .toggle-container {
       display: flex;
       justify-content: flex-end;
@@ -558,7 +525,6 @@
       left: 28px;
     }
     
-    /* Video List */
     .video-list {
       max-height: 200px;
       overflow-y: auto;
@@ -610,7 +576,6 @@
   </style>
 </head>
 <body>
-  <!-- LOGIN SCREEN -->
   <div class="login-screen" id="loginScreen">
     <h2>🔐 StreamDesk</h2>
     <p>Enter your 6-digit code</p>
@@ -619,7 +584,6 @@
     <div class="error-message" id="errorMessage">Invalid code. Please try again.</div>
   </div>
 
-  <!-- USER PROFILE BOX -->
   <div class="user-profile-box hidden" id="userProfileBox">
     <div class="user-profile-inner">
       <img src="/user/none.png" alt="User Avatar" class="user-avatar" id="userAvatar">
@@ -627,9 +591,7 @@
     </div>
   </div>
 
-  <!-- MAIN CONTAINER -->
   <div class="container hidden" id="mainContainer">
-    <!-- Language Control Box -->
     <div class="control-panel language-panel">
       <div class="language-buttons">
         <button class="btn-language active" id="btnGerman" data-lang="de">
@@ -641,14 +603,13 @@
       </div>
     </div>
     
-    <!-- Spotify Control Box -->
     <div class="control-panel spotify-panel collapsed" id="spotifyPanel">
       <div class="panel-header collapsed" id="spotifyHeader">
         <span class="panel-arrow collapsed">˅</span>
         <span class="panel-title">Music</span>
       </div>
       <div class="panel-content collapsed" id="spotifyContent">
-        <div class="spotify-status" id="spotifyStatus">
+        <div id="spotifyStatus">
           <button class="btn-spotify-connect" id="spotifyConnectBtn">🎵 Connect Spotify</button>
         </div>
         
@@ -666,7 +627,6 @@
       </div>
     </div>
     
-    <!-- Timer Control Box -->
     <div class="control-panel timer-panel collapsed" id="timerPanel">
       <div class="panel-header collapsed" id="timerHeader">
         <span class="panel-arrow collapsed">˅</span>
@@ -691,7 +651,6 @@
       </div>
     </div>
     
-    <!-- Pop-Up Control Box -->
     <div class="control-panel popup-panel collapsed" id="popupPanel">
       <div class="panel-header collapsed" id="popupHeader">
         <span class="panel-arrow collapsed">˅</span>
@@ -713,12 +672,13 @@
 
   <script>
     const API_URL = window.location.origin;
-    let timerInterval = null;
-    let currentState = null;
-    let spotifyConnected = false;
     let sessionId = null;
+    let currentLanguage = 'de';
+    let spotifyConnected = false;
+    let availableVideos = [];
+    let selectedVideos = [];
+    let popupActive = false;
     
-    // Elements
     const loginScreen = document.getElementById('loginScreen');
     const mainContainer = document.getElementById('mainContainer');
     const codeInput = document.getElementById('codeInput');
@@ -728,59 +688,28 @@
     const userAvatar = document.getElementById('userAvatar');
     const userName = document.getElementById('userName');
     
-    const startBtn = document.getElementById('startBtn');
-    const pauseBtn = document.getElementById('pauseBtn');
-    const resetBtn = document.getElementById('resetBtn');
-    const timeInput = document.getElementById('timeInput');
-    const previewTime = document.getElementById('previewTime');
-    const previewEnd = document.getElementById('previewEnd');
-    
-    const spotifyPanel = document.getElementById('spotifyPanel');
-    const spotifyConnectBtn = document.getElementById('spotifyConnectBtn');
-    const spotifyControls = document.getElementById('spotifyControls');
-    const spotifyStatus = document.getElementById('spotifyStatus');
-    const volumeSlider = document.getElementById('volumeSlider');
-    const volumeValue = document.getElementById('volumeValue');
-    const playPauseBtn = document.getElementById('playPauseBtn');
-    const skipBtn = document.getElementById('skipBtn');
-    const btnGerman = document.getElementById('btnGerman');
-    const btnEnglish = document.getElementById('btnEnglish');
-    
-    const spotifyHeader = document.getElementById('spotifyHeader');
-    const spotifyContent = document.getElementById('spotifyContent');
-    const timerPanel = document.getElementById('timerPanel');
-    const timerHeader = document.getElementById('timerHeader');
-    const timerContent = document.getElementById('timerContent');
-    
-    const popupHeader = document.getElementById('popupHeader');
-    const popupContent = document.getElementById('popupContent');
-    const popupToggle = document.getElementById('popupToggle');
-    const popupPanel = document.getElementById('popupPanel');
-    const videoList = document.getElementById('videoList');
-    
-    let availableVideos = [];
-    let selectedVideos = [];
-    let popupActive = false;
-    let currentLanguage = 'de';
-    
-    // ===== AUTHENTICATION =====
-    
     function generateSessionId() {
-      return 'session_' + Math.random().toString(36).substring(2, 15);
+      return 'session_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     }
     
-    // Check if auth is required on page load
+    function getHeaders() {
+      const headers = { 'Content-Type': 'application/json' };
+      if (sessionId) {
+        headers['X-Session-Id'] = sessionId;
+      }
+      return headers;
+    }
+    
     async function checkAuthStatus() {
       try {
         const res = await fetch(`${API_URL}/api/instance/info`);
         const data = await res.json();
         
         if (!data.authRequired) {
-          // Auth disabled, auto-login
           sessionId = generateSessionId();
           const loginRes = await fetch(`${API_URL}/api/auth/verify`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getHeaders(),
             body: JSON.stringify({ code: '000000', sessionId })
           });
           const loginData = await loginRes.json();
@@ -789,7 +718,6 @@
             showMainContainer(loginData.user);
           }
         } else {
-          // Auth required, show login screen
           loginScreen.classList.remove('hidden');
         }
       } catch (err) {
@@ -806,14 +734,17 @@
         return;
       }
       
+      btnLogin.disabled = true;
+      btnLogin.textContent = 'Logging in...';
       sessionId = generateSessionId();
       
       try {
         const res = await fetch(`${API_URL}/api/auth/verify`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getHeaders(),
           body: JSON.stringify({ code, sessionId })
         });
+        
         const data = await res.json();
         
         if (data.success) {
@@ -822,11 +753,16 @@
           errorMessage.classList.add('show');
           codeInput.value = '';
           codeInput.focus();
+          sessionId = null;
         }
       } catch (err) {
         console.error('Login error:', err);
         errorMessage.textContent = 'Connection error. Please try again.';
         errorMessage.classList.add('show');
+        sessionId = null;
+      } finally {
+        btnLogin.disabled = false;
+        btnLogin.textContent = 'Login';
       }
     }
     
@@ -838,30 +774,19 @@
       if (user) {
         userName.textContent = user.name;
         userAvatar.src = `/user/${user.avatar}`;
-        userAvatar.onerror = () => {
-          userAvatar.src = '/user/none.png';
-        };
+        userAvatar.onerror = () => { userAvatar.src = '/user/none.png'; };
       }
       
       initializeApp();
     }
     
     btnLogin.addEventListener('click', login);
-    
     codeInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        login();
-      }
+      if (e.key === 'Enter') login();
     });
-    
     codeInput.addEventListener('input', () => {
       errorMessage.classList.remove('show');
     });
-    
-    // Check auth status on load
-    checkAuthStatus();
-    
-    // ===== MAIN APP =====
     
     function initializeApp() {
       checkSpotifyConnection();
@@ -872,8 +797,6 @@
       setInterval(loadPopupState, 3000);
       setInterval(updateSpotifyStatus, 2000);
     }
-    
-    // ===== PANELS =====
     
     function togglePanel(header, content) {
       const arrow = header.querySelector('.panel-arrow');
@@ -896,54 +819,51 @@
       }
     }
     
-    spotifyHeader.addEventListener('click', () => {
-      togglePanel(spotifyHeader, spotifyContent);
+    document.getElementById('spotifyHeader').addEventListener('click', () => {
+      togglePanel(document.getElementById('spotifyHeader'), document.getElementById('spotifyContent'));
     });
     
-    timerHeader.addEventListener('click', () => {
-      togglePanel(timerHeader, timerContent);
+    document.getElementById('timerHeader').addEventListener('click', () => {
+      togglePanel(document.getElementById('timerHeader'), document.getElementById('timerContent'));
     });
     
-    popupHeader.addEventListener('click', () => {
-      togglePanel(popupHeader, popupContent);
+    document.getElementById('popupHeader').addEventListener('click', () => {
+      togglePanel(document.getElementById('popupHeader'), document.getElementById('popupContent'));
     });
     
-    // ===== LANGUAGE =====
-    
-    btnGerman.addEventListener('click', async () => {
+    document.getElementById('btnGerman').addEventListener('click', async () => {
       currentLanguage = 'de';
-      btnGerman.classList.add('active');
-      btnEnglish.classList.remove('active');
+      document.getElementById('btnGerman').classList.add('active');
+      document.getElementById('btnEnglish').classList.remove('active');
       await updateState({ language: 'de' });
     });
     
-    btnEnglish.addEventListener('click', async () => {
+    document.getElementById('btnEnglish').addEventListener('click', async () => {
       currentLanguage = 'en';
-      btnEnglish.classList.add('active');
-      btnGerman.classList.remove('active');
+      document.getElementById('btnEnglish').classList.add('active');
+      document.getElementById('btnGerman').classList.remove('active');
       await updateState({ language: 'en' });
     });
     
-    // ===== SPOTIFY =====
-    
-    spotifyConnectBtn.addEventListener('click', () => {
+    document.getElementById('spotifyConnectBtn').addEventListener('click', () => {
       window.open(`${API_URL}/spotify/login`, '_blank', 'width=500,height=700');
       setTimeout(checkSpotifyConnection, 2000);
     });
     
     async function checkSpotifyConnection() {
+      if (!sessionId) return;
       try {
         const res = await fetch(`${API_URL}/api/spotify/state`, {
-          headers: { 'X-Session-Id': sessionId }
+          headers: getHeaders()
         });
         const data = await res.json();
         
         if (data.connected) {
           spotifyConnected = true;
-          spotifyStatus.classList.add('hidden');
-          spotifyControls.classList.remove('hidden');
-          volumeSlider.value = data.volume;
-          volumeValue.textContent = data.volume;
+          document.getElementById('spotifyStatus').classList.add('hidden');
+          document.getElementById('spotifyControls').classList.remove('hidden');
+          document.getElementById('volumeSlider').value = data.volume;
+          document.getElementById('volumeValue').textContent = data.volume;
         }
       } catch (err) {
         console.error('Spotify check error:', err);
@@ -951,36 +871,275 @@
     }
     
     async function updateSpotifyStatus() {
-      if (!spotifyConnected) return;
+      if (!spotifyConnected || !sessionId) return;
       
       try {
         const res = await fetch(`${API_URL}/api/spotify/state`, {
-          headers: { 'X-Session-Id': sessionId }
+          headers: getHeaders()
         });
         const data = await res.json();
         
+        const panel = document.getElementById('spotifyPanel');
         if (data.isPlaying) {
-          spotifyPanel.classList.add('playing');
+          panel.classList.add('playing');
         } else {
-          spotifyPanel.classList.remove('playing');
+          panel.classList.remove('playing');
         }
       } catch (err) {
         console.error('Spotify status error:', err);
       }
     }
     
-    volumeSlider.addEventListener('input', async (e) => {
+    document.getElementById('volumeSlider').addEventListener('input', async (e) => {
+      if (!sessionId) return;
       const volume = parseInt(e.target.value);
-      volumeValue.textContent = volume;
+      document.getElementById('volumeValue').textContent = volume;
       
       try {
         await fetch(`${API_URL}/api/spotify/volume`, {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-Session-Id': sessionId
-          },
+          headers: getHeaders(),
           body: JSON.stringify({ volume })
         });
       } catch (err) {
-        console.error('Volume
+        console.error('Volume error:', err);
+      }
+    });
+    
+    document.getElementById('playPauseBtn').addEventListener('click', async () => {
+      if (!sessionId) return;
+      try {
+        await fetch(`${API_URL}/api/spotify/playpause`, {
+          method: 'POST',
+          headers: getHeaders()
+        });
+      } catch (err) {
+        console.error('Play/Pause error:', err);
+      }
+    });
+    
+    document.getElementById('skipBtn').addEventListener('click', async () => {
+      if (!sessionId) return;
+      try {
+        await fetch(`${API_URL}/api/spotify/skip`, {
+          method: 'POST',
+          headers: getHeaders()
+        });
+      } catch (err) {
+        console.error('Skip error:', err);
+      }
+    });
+    
+    async function loadState() {
+      if (!sessionId) return;
+      try {
+        const res = await fetch(`${API_URL}/api/state`, {
+          headers: getHeaders()
+        });
+        const state = await res.json();
+        
+        updateTimerUI(state.timer);
+        updateLanguageUI(state.language);
+      } catch (err) {
+        console.error('Load state error:', err);
+      }
+    }
+    
+    function updateTimerUI(timer) {
+      const previewTime = document.getElementById('previewTime');
+      const previewEnd = document.getElementById('previewEnd');
+      const timerPanel = document.getElementById('timerPanel');
+      const startBtn = document.getElementById('startBtn');
+      const pauseBtn = document.getElementById('pauseBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      
+      if (timer.remaining > 0) {
+        const mins = Math.floor(timer.remaining / 60);
+        const secs = timer.remaining % 60;
+        previewTime.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        
+        if (timer.endTime) {
+          const endDate = new Date(timer.endTime);
+          previewEnd.textContent = `Resume: ${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')} Uhr`;
+        }
+        
+        timerPanel.classList.add('running');
+        startBtn.classList.add('hidden');
+        pauseBtn.classList.remove('hidden');
+        resetBtn.classList.remove('hidden');
+        
+        if (timer.paused) {
+          pauseBtn.textContent = '▶️ Resume';
+        } else {
+          pauseBtn.textContent = '⏸️ Pause';
+        }
+      } else {
+        previewTime.textContent = '00:00';
+        previewEnd.textContent = 'Resume: --:-- Uhr';
+        timerPanel.classList.remove('running');
+        startBtn.classList.remove('hidden');
+        pauseBtn.classList.add('hidden');
+        resetBtn.classList.add('hidden');
+      }
+    }
+    
+    function updateLanguageUI(lang) {
+      if (lang === 'de') {
+        document.getElementById('btnGerman').classList.add('active');
+        document.getElementById('btnEnglish').classList.remove('active');
+      } else {
+        document.getElementById('btnEnglish').classList.add('active');
+        document.getElementById('btnGerman').classList.remove('active');
+      }
+    }
+    
+    async function updateState(data) {
+      if (!sessionId) return;
+      try {
+        await fetch(`${API_URL}/api/state`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify(data)
+        });
+      } catch (err) {
+        console.error('Update state error:', err);
+      }
+    }
+    
+    document.getElementById('startBtn').addEventListener('click', async () => {
+      if (!sessionId) return;
+      const minutes = parseInt(document.getElementById('timeInput').value) || 5;
+      await updateState({ timer: { action: 'start', minutes } });
+    });
+    
+    document.getElementById('pauseBtn').addEventListener('click', async () => {
+      if (!sessionId) return;
+      await updateState({ timer: { action: 'pause' } });
+    });
+    
+    document.getElementById('resetBtn').addEventListener('click', async () => {
+      if (!sessionId) return;
+      await updateState({ timer: { action: 'reset' } });
+    });
+    
+    async function loadVideos() {
+      if (!sessionId) return;
+      try {
+        const res = await fetch(`${API_URL}/api/popup/videos`, {
+          headers: getHeaders()
+        });
+        const data = await res.json();
+        availableVideos = data.videos || [];
+        renderVideoList();
+      } catch (err) {
+        console.error('Load videos error:', err);
+      }
+    }
+    
+    function renderVideoList() {
+      const videoList = document.getElementById('videoList');
+      
+      if (availableVideos.length === 0) {
+        videoList.innerHTML = '<div class="no-videos">No videos available</div>';
+        return;
+      }
+      
+      videoList.innerHTML = '';
+      availableVideos.forEach(video => {
+        const item = document.createElement('div');
+        item.className = 'video-item';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'video-checkbox';
+        checkbox.checked = selectedVideos.includes(video);
+        checkbox.addEventListener('change', (e) => {
+          if (e.target.checked) {
+            selectedVideos.push(video);
+          } else {
+            selectedVideos = selectedVideos.filter(v => v !== video);
+          }
+          updatePopupVideos();
+        });
+        
+        const name = document.createElement('span');
+        name.className = 'video-name';
+        name.textContent = video;
+        
+        item.appendChild(checkbox);
+        item.appendChild(name);
+        videoList.appendChild(item);
+      });
+    }
+    
+    async function loadPopupState() {
+      if (!sessionId) return;
+      try {
+        const res = await fetch(`${API_URL}/api/popup/state`, {
+          headers: getHeaders()
+        });
+        const data = await res.json();
+        
+        popupActive = data.active;
+        selectedVideos = data.videos || [];
+        
+        const toggle = document.getElementById('popupToggle');
+        const panel = document.getElementById('popupPanel');
+        
+        if (popupActive) {
+          toggle.classList.add('active');
+          panel.classList.add('active');
+        } else {
+          toggle.classList.remove('active');
+          panel.classList.remove('active');
+        }
+        
+        renderVideoList();
+      } catch (err) {
+        console.error('Load popup state error:', err);
+      }
+    }
+    
+    document.getElementById('popupToggle').addEventListener('click', async () => {
+      if (!sessionId) return;
+      popupActive = !popupActive;
+      
+      const toggle = document.getElementById('popupToggle');
+      const panel = document.getElementById('popupPanel');
+      
+      if (popupActive) {
+        toggle.classList.add('active');
+        panel.classList.add('active');
+      } else {
+        toggle.classList.remove('active');
+        panel.classList.remove('active');
+      }
+      
+      try {
+        await fetch(`${API_URL}/api/popup/toggle`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ active: popupActive })
+        });
+      } catch (err) {
+        console.error('Toggle popup error:', err);
+      }
+    });
+    
+    async function updatePopupVideos() {
+      if (!sessionId) return;
+      try {
+        await fetch(`${API_URL}/api/popup/videos`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ videos: selectedVideos })
+        });
+      } catch (err) {
+        console.error('Update popup videos error:', err);
+      }
+    }
+    
+    checkAuthStatus();
+  </script>
+</body>
+</html>
