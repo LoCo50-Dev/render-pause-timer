@@ -678,6 +678,10 @@
     let availableVideos = [];
     let selectedVideos = [];
     let popupActive = false;
+    let isUpdating = false;
+    let stateInterval = null;
+    let popupInterval = null;
+    let spotifyInterval = null;
     
     const loginScreen = document.getElementById('loginScreen');
     const mainContainer = document.getElementById('mainContainer');
@@ -793,9 +797,9 @@
       loadVideos();
       loadPopupState();
       loadState();
-      setInterval(loadState, 500);
-      setInterval(loadPopupState, 3000);
-      setInterval(updateSpotifyStatus, 2000);
+      stateInterval = setInterval(loadState, 500);
+      popupInterval = setInterval(loadPopupState, 3000);
+      spotifyInterval = setInterval(updateSpotifyStatus, 2000);
     }
     
     function togglePanel(header, content) {
@@ -931,7 +935,7 @@
     });
     
     async function loadState() {
-      if (!sessionId) return;
+      if (!sessionId || isUpdating) return;
       try {
         const res = await fetch(`${API_URL}/api/state`, {
           headers: getHeaders()
@@ -995,14 +999,19 @@
     
     async function updateState(data) {
       if (!sessionId) return;
+      isUpdating = true;
       try {
         await fetch(`${API_URL}/api/state`, {
           method: 'POST',
           headers: getHeaders(),
           body: JSON.stringify(data)
         });
+        await new Promise(resolve => setTimeout(resolve, 200));
+        await loadState();
       } catch (err) {
         console.error('Update state error:', err);
+      } finally {
+        isUpdating = false;
       }
     }
     
@@ -1073,7 +1082,7 @@
     }
     
     async function loadPopupState() {
-      if (!sessionId) return;
+      if (!sessionId || isUpdating) return;
       try {
         const res = await fetch(`${API_URL}/api/popup/state`, {
           headers: getHeaders()
@@ -1102,6 +1111,7 @@
     
     document.getElementById('popupToggle').addEventListener('click', async () => {
       if (!sessionId) return;
+      isUpdating = true;
       popupActive = !popupActive;
       
       const toggle = document.getElementById('popupToggle');
@@ -1121,21 +1131,28 @@
           headers: getHeaders(),
           body: JSON.stringify({ active: popupActive })
         });
+        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (err) {
         console.error('Toggle popup error:', err);
+      } finally {
+        isUpdating = false;
       }
     });
     
     async function updatePopupVideos() {
       if (!sessionId) return;
+      isUpdating = true;
       try {
         await fetch(`${API_URL}/api/popup/videos`, {
           method: 'POST',
           headers: getHeaders(),
           body: JSON.stringify({ videos: selectedVideos })
         });
+        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (err) {
         console.error('Update popup videos error:', err);
+      } finally {
+        isUpdating = false;
       }
     }
     
