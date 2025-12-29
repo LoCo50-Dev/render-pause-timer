@@ -3,7 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pause Timer Control Panel</title>
+  <title>StreamDesk Control</title>
+  
+  <!-- App Icons for Mobile -->
+  <link rel="icon" type="image/x-icon" href="/assets/icon.ico">
+  <link rel="apple-touch-icon" href="/assets/icon.ico">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="StreamDesk">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#2a2a2a">
   <style>
     * {
       margin: 0;
@@ -585,6 +594,19 @@
       try {
         const res = await fetch(`${API_URL}/api/state`);
         currentState = await res.json();
+        
+        // Sync language buttons with server state
+        if (currentState.language) {
+          currentLanguage = currentState.language;
+          if (currentLanguage === 'de') {
+            btnGerman.classList.add('active');
+            btnEnglish.classList.remove('active');
+          } else if (currentLanguage === 'en') {
+            btnEnglish.classList.add('active');
+            btnGerman.classList.remove('active');
+          }
+        }
+        
         updateUI();
       } catch (err) {
         console.error('Fehler beim Laden:', err);
