@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>StreamDesk Control</title>
-  
-  <link rel="icon" type="image/x-icon" href="/assets/icon.ico">
-  <link rel="apple-touch-icon" href="/assets/icon.ico">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="StreamDesk">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#2a2a2a">
+  <title>Pause Timer Display</title>
   <style>
+    @font-face {
+      font-family: 'CustomStreamFont';
+      src: url('/fonts/font.ttf') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: swap;
+    }
+    
     * {
       margin: 0;
       padding: 0;
@@ -20,989 +20,76 @@
     }
     
     body {
-      font-family: Arial, sans-serif;
       background: transparent;
+      font-family: 'CustomStreamFont', Arial, sans-serif;
       color: white;
-      padding: 20px;
       display: flex;
       justify-content: center;
       align-items: center;
       min-height: 100vh;
-    }
-    
-    /* LOGIN SCREEN */
-    .login-screen {
-      background: #2a2a2a;
-      border-radius: 15px;
-      padding: 30px;
-      max-width: 320px;
-      width: 100%;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-      text-align: center;
-    }
-    
-    .login-screen h2 {
-      margin-bottom: 20px;
-      font-size: 24px;
-    }
-    
-    .login-screen p {
-      margin-bottom: 20px;
-      opacity: 0.7;
-      font-size: 14px;
-    }
-    
-    .code-input {
-      width: 100%;
-      padding: 15px;
-      font-size: 24px;
-      letter-spacing: 8px;
-      text-align: center;
-      background: #1a1a1a;
-      border: 2px solid #3a3a3a;
-      border-radius: 8px;
-      color: white;
-      margin-bottom: 15px;
-    }
-    
-    .code-input:focus {
-      outline: none;
-      border-color: #4CAF50;
-    }
-    
-    .btn-login {
-      width: 100%;
-      padding: 15px;
-      background: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    
-    .btn-login:hover {
-      background: #45a049;
-    }
-    
-    .error-message {
-      color: #f44336;
-      margin-top: 10px;
-      font-size: 14px;
-      display: none;
-    }
-    
-    .error-message.show {
-      display: block;
-    }
-    
-    /* USER PROFILE BOX */
-    .user-profile-box {
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 3px;
-      display: flex;
-      align-items: center;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-      z-index: 1000;
-      border-radius: 18px;
-      background: linear-gradient(
-        90deg,
-        #ff0000,
-        #ff7f00,
-        #ffff00,
-        #00ff00,
-        #0000ff,
-        #4b0082,
-        #9400d3,
-        #ff0000,
-        #ff7f00,
-        #ffff00,
-        #00ff00,
-        #0000ff,
-        #4b0082,
-        #9400d3,
-        #ff0000
-      );
-      background-size: 300% 100%;
-      animation: rainbow-flow 15s linear infinite;
-    }
-    
-    .user-profile-inner {
-      background: #2a2a2a;
-      border-radius: 15px;
-      padding: 10px 20px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    
-    @keyframes rainbow-flow {
-      0% {
-        background-position: 0% 0%;
-      }
-      100% {
-        background-position: 300% 0%;
-      }
-    }
-    
-    .user-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 2px solid #4CAF50;
-    }
-    
-    .user-name {
-      font-size: 14px;
-      font-weight: bold;
-      color: white;
-    }
-    
-    /* MAIN CONTAINER */
-    .container {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-      width: 100%;
-      max-width: 320px;
-      margin-top: 80px;
-    }
-    
-    .hidden {
-      display: none !important;
-    }
-    
-    .control-panel {
-      background: #2a2a2a;
-      border-radius: 15px;
-      padding: 18px;
-      width: 100%;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-      transition: padding 0.3s ease, border-color 0.5s ease;
-    }
-    
-    .control-panel.collapsed {
-      padding: 8px 12px;
-    }
-    
-    /* SPOTIFY PANEL - Dunkel-Grün → Hell-Grün beim Spielen */
-    .spotify-panel {
-      border: 2px solid #0d5c1f;
-      transition: border-color 0.5s ease;
-    }
-    
-    .spotify-panel.playing {
-      border-color: #1DB954;
-    }
-    
-    /* TIMER PANEL - Dunkel-Blau → Cyan beim Laufen */
-    .timer-panel {
-      border: 2px solid #1a3a52;
-      transition: border-color 0.5s ease;
-    }
-    
-    .timer-panel.running {
-      border-color: #00BCD4;
-    }
-    
-    /* LANGUAGE PANEL */
-    .language-panel {
-      border: 2px solid #FF9800;
-      padding: 11px;
-    }
-    
-    /* POP-UP PANEL - Dunkel-Lila → Magenta beim Aktivieren */
-    .popup-panel {
-      border: 2px solid #4a1a5c;
-      transition: border-color 0.5s ease;
-    }
-    
-    .popup-panel.active {
-      border-color: #E91E63;
-    }
-    
-    .language-buttons {
-      display: flex;
-      gap: 10px;
-    }
-    
-    .btn-language {
-      flex: 1;
-      padding: 0;
-      border: 2px solid #3a3a3a;
-      border-radius: 8px;
-      cursor: pointer;
-      background: #1a1a1a;
-      transition: all 0.3s;
-      overflow: hidden;
-      height: 60px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    
-    .btn-language.active {
-      border-color: #FF9800;
-      background: #2a2a2a;
-      box-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
-    }
-    
-    .btn-language:hover {
-      background: #2a2a2a;
-    }
-    
-    .flag-img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    
-    .panel-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      user-select: none;
-      margin-bottom: 11px;
-      padding: 0;
-    }
-    
-    .panel-header.collapsed {
-      margin-bottom: 0;
-    }
-    
-    .panel-arrow {
-      font-size: 16px;
-      transition: transform 0.3s ease;
-      color: white;
-      line-height: 1;
-    }
-    
-    .panel-arrow.collapsed {
-      transform: rotate(-90deg);
-    }
-    
-    .panel-title {
-      font-size: 12px;
-      font-weight: bold;
-      opacity: 1;
-      transition: opacity 0.3s ease;
-      line-height: 1;
-    }
-    
-    .panel-title.hidden {
-      opacity: 0;
-    }
-    
-    .panel-content {
-      max-height: 1000px;
-      overflow: hidden;
-      transition: max-height 0.3s ease, opacity 0.3s ease;
-      opacity: 1;
-    }
-    
-    .panel-content.collapsed {
-      max-height: 0;
-      opacity: 0;
-    }
-    
-    h1 {
-      display: none;
-    }
-    
-    .preview {
-      background: #1a1a1a;
-      padding: 15px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      text-align: center;
-    }
-    
-    .spotify-section {
-      margin-bottom: 20px;
-    }
-    
-    .spotify-status {
-      text-align: center;
-      margin-bottom: 15px;
-    }
-    
-    .btn-spotify-connect {
-      width: 100%;
-      padding: 12px;
-      background: #1DB954;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 15px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    
-    .btn-spotify-connect:hover {
-      background: #1ed760;
-    }
-    
-    .spotify-controls {
-      background: #1a1a1a;
-      padding: 15px;
-      border-radius: 10px;
-    }
-    
-    .volume-control {
-      margin-bottom: 15px;
-    }
-    
-    .volume-control label {
-      display: block;
-      margin-bottom: 8px;
-      font-size: 14px;
-      text-align: center;
-    }
-    
-    .slider {
-      width: 100%;
-      height: 6px;
-      border-radius: 3px;
-      background: #3a3a3a;
-      outline: none;
-      -webkit-appearance: none;
-    }
-    
-    .slider::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: #1DB954;
-      cursor: pointer;
-    }
-    
-    .slider::-moz-range-thumb {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: #1DB954;
-      cursor: pointer;
-      border: none;
-    }
-    
-    .music-buttons {
-      display: flex;
-      gap: 10px;
-    }
-    
-    .btn-music {
-      flex: 1;
-      padding: 15px;
-      border: none;
-      border-radius: 8px;
-      font-size: 20px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-    
-    .btn-pause {
-      background: #555;
-    }
-    
-    .btn-pause.paused {
-      background: #444;
-      opacity: 0.7;
-    }
-    
-    .btn-pause.playing {
-      background: #1DB954;
-      animation: pulse 2s ease-in-out infinite;
-    }
-    
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
-    }
-    
-    .btn-skip {
-      background: #FF9800;
-    }
-    
-    .btn-skip:hover {
-      background: #e68900;
-    }
-    
-    .preview-time {
-      font-size: 28px;
-      font-weight: bold;
-      margin-bottom: 8px;
-    }
-    
-    .preview-end {
-      font-size: 14px;
-      opacity: 0.7;
-    }
-    
-    .input-group {
-      margin-bottom: 15px;
-    }
-    
-    label {
-      display: block;
-      margin-bottom: 6px;
-      font-size: 13px;
-      opacity: 0.8;
-    }
-    
-    input {
-      width: 100%;
-      padding: 10px;
-      background: #1a1a1a;
-      border: 2px solid #3a3a3a;
-      border-radius: 8px;
-      color: white;
-      font-size: 15px;
-      transition: border-color 0.3s;
-    }
-    
-    input:focus {
-      outline: none;
-      border-color: #4CAF50;
-    }
-    
-    .button-group {
-      display: flex;
-      gap: 8px;
-      margin-top: 15px;
-    }
-    
-    button {
-      flex: 1;
-      padding: 12px;
-      border: none;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-    
-    .btn-start {
-      background: #4CAF50;
-      color: white;
-    }
-    
-    .btn-start:hover {
-      background: #45a049;
-    }
-    
-    .btn-pause-timer {
-      background: #FF9800;
-      color: white;
-    }
-    
-    .btn-pause-timer:hover {
-      background: #e68900;
-    }
-    
-    .btn-reset {
-      background: #f44336;
-      color: white;
-    }
-    
-    .btn-reset:hover {
-      background: #da190b;
-    }
-    
-    /* Toggle Switch Styles */
-    .toggle-container {
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      margin-bottom: 11px;
-    }
-    
-    .toggle-switch {
-      position: relative;
-      width: 50px;
-      height: 24px;
-      background: #f44336;
-      border-radius: 12px;
-      cursor: pointer;
-      transition: background-color 0.3s ease;
-    }
-    
-    .toggle-switch.active {
-      background: #4CAF50;
-    }
-    
-    .toggle-circle {
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 20px;
-      height: 20px;
-      background: white;
-      border-radius: 50%;
-      transition: left 0.3s ease;
-    }
-    
-    .toggle-switch.active .toggle-circle {
-      left: 28px;
-    }
-    
-    /* Video List Styles */
-    .video-list {
-      max-height: 200px;
-      overflow-y: auto;
-      background: #1a1a1a;
-      border-radius: 8px;
-      padding: 10px;
-    }
-    
-    .video-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px;
-      margin-bottom: 6px;
-      background: #2a2a2a;
-      border-radius: 6px;
-      transition: background 0.2s;
-    }
-    
-    .video-item:hover {
-      background: #3a3a3a;
-    }
-    
-    .video-item:last-child {
-      margin-bottom: 0;
-    }
-    
-    .video-checkbox {
-      width: 18px;
-      height: 18px;
-      cursor: pointer;
-      accent-color: #9C27B0;
-    }
-    
-    .video-name {
-      font-size: 13px;
-      flex: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    
-    .no-videos {
-      text-align: center;
-      opacity: 0.5;
-      font-size: 13px;
       padding: 20px;
+    }
+    
+    .timer-container {
+      text-align: center;
+      width: 100%;
+      max-width: 600px;
+    }
+    
+    .countdown {
+      font-size: 72px;
+      font-weight: bold;
+      margin-bottom: 20px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    }
+    
+    .progress-container {
+      width: 100%;
+      height: 30px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 15px;
+      overflow: hidden;
+      margin-bottom: 15px;
+    }
+    
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #4CAF50, #8BC34A);
+      transition: width 0.3s ease;
+      border-radius: 15px;
+    }
+    
+    .end-time {
+      font-size: 24px;
+      opacity: 0.8;
     }
   </style>
 </head>
 <body>
-  <!-- LOGIN SCREEN -->
-  <div class="login-screen" id="loginScreen">
-    <h2>🔐 StreamDesk</h2>
-    <p>Enter your 6-digit code</p>
-    <input type="text" class="code-input" id="codeInput" maxlength="6" placeholder="000000" autofocus>
-    <button class="btn-login" id="btnLogin">Login</button>
-    <div class="error-message" id="errorMessage">Invalid code. Please try again.</div>
+  <div class="timer-container">
+    <div class="countdown" id="countdown">Stream beginnt in Kürze</div>
+    <div class="progress-container">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div class="end-time" id="endTime">Pause wurde übersprungen</div>
   </div>
-
-  <!-- USER PROFILE BOX -->
-  <div class="user-profile-box hidden" id="userProfileBox">
-    <div class="user-profile-inner">
-      <img src="/user/none.png" alt="User Avatar" class="user-avatar" id="userAvatar">
-      <span class="user-name" id="userName">Guest</span>
-    </div>
-  </div>
-
-  <!-- MAIN CONTAINER -->
-  <div class="container hidden" id="mainContainer">
-    <!-- Language Control Box -->
-    <div class="control-panel language-panel">
-      <div class="language-buttons">
-        <button class="btn-language active" id="btnGerman" data-lang="de">
-          <img src="/assets/de.webp" alt="Deutsch" class="flag-img">
-        </button>
-        <button class="btn-language" id="btnEnglish" data-lang="en">
-          <img src="/assets/en.webp" alt="English" class="flag-img">
-        </button>
-      </div>
-    </div>
-    
-    <!-- Spotify Control Box -->
-    <div class="control-panel spotify-panel collapsed" id="spotifyPanel">
-      <div class="panel-header collapsed" id="spotifyHeader">
-        <span class="panel-arrow collapsed">˅</span>
-        <span class="panel-title">Music</span>
-      </div>
-      <div class="panel-content collapsed" id="spotifyContent">
-        <div class="spotify-status" id="spotifyStatus">
-          <button class="btn-spotify-connect" id="spotifyConnectBtn">🎵 Connect Spotify</button>
-        </div>
-        
-        <div class="spotify-controls hidden" id="spotifyControls">
-          <div class="volume-control">
-            <label>🔊 Volume: <span id="volumeValue">50</span>%</label>
-            <input type="range" id="volumeSlider" min="0" max="100" value="50" class="slider">
-          </div>
-          
-          <div class="music-buttons">
-            <button class="btn-music btn-pause paused" id="playPauseBtn">❚❚</button>
-            <button class="btn-music btn-skip" id="skipBtn">⏭</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Timer Control Box -->
-    <div class="control-panel timer-panel collapsed" id="timerPanel">
-      <div class="panel-header collapsed" id="timerHeader">
-        <span class="panel-arrow collapsed">˅</span>
-        <span class="panel-title">Break Timer</span>
-      </div>
-      <div class="panel-content collapsed" id="timerContent">
-        <div class="preview">
-          <div class="preview-time" id="previewTime">00:00</div>
-          <div class="preview-end" id="previewEnd">Resume: --:-- Uhr</div>
-        </div>
-        
-        <div class="input-group">
-          <label for="timeInput">Time in minutes:</label>
-          <input type="number" id="timeInput" min="1" placeholder="e.g. 5" value="5">
-        </div>
-        
-        <div class="button-group">
-          <button class="btn-start" id="startBtn">▶️ Start</button>
-          <button class="btn-pause-timer hidden" id="pauseBtn">⏸️ Pause</button>
-          <button class="btn-reset hidden" id="resetBtn">⏹️ Reset</button>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Pop-Up Control Box -->
-    <div class="control-panel popup-panel collapsed" id="popupPanel">
-      <div class="panel-header collapsed" id="popupHeader">
-        <span class="panel-arrow collapsed">˅</span>
-        <span class="panel-title">Pop-Up</span>
-      </div>
-      <div class="panel-content collapsed" id="popupContent">
-        <div class="toggle-container">
-          <div class="toggle-switch" id="popupToggle">
-            <div class="toggle-circle"></div>
-          </div>
-        </div>
-        
-        <div class="video-list" id="videoList">
-          <div class="no-videos">Loading videos...</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <script>
     const API_URL = window.location.origin;
-    let timerInterval = null;
-    let currentState = null;
-    let spotifyConnected = false;
-    let sessionId = null;
-    let currentUser = null;
     
-    // Elements
-    const loginScreen = document.getElementById('loginScreen');
-    const mainContainer = document.getElementById('mainContainer');
-    const codeInput = document.getElementById('codeInput');
-    const btnLogin = document.getElementById('btnLogin');
-    const errorMessage = document.getElementById('errorMessage');
-    const userProfileBox = document.getElementById('userProfileBox');
-    const userAvatar = document.getElementById('userAvatar');
-    const userName = document.getElementById('userName');
+    const translations = {
+      de: {
+        starting: 'Stream beginnt in Kürze',
+        skipped: 'Pause wurde übersprungen',
+        endsAt: 'Ungefähr um'
+      },
+      en: {
+        starting: 'Stream starting soon',
+        skipped: 'Break was skipped',
+        endsAt: 'Around'
+      }
+    };
     
-    const startBtn = document.getElementById('startBtn');
-    const pauseBtn = document.getElementById('pauseBtn');
-    const resetBtn = document.getElementById('resetBtn');
-    const timeInput = document.getElementById('timeInput');
-    const previewTime = document.getElementById('previewTime');
-    const previewEnd = document.getElementById('previewEnd');
-    
-    const spotifyPanel = document.getElementById('spotifyPanel');
-    const spotifyConnectBtn = document.getElementById('spotifyConnectBtn');
-    const spotifyControls = document.getElementById('spotifyControls');
-    const spotifyStatus = document.getElementById('spotifyStatus');
-    const volumeSlider = document.getElementById('volumeSlider');
-    const volumeValue = document.getElementById('volumeValue');
-    const playPauseBtn = document.getElementById('playPauseBtn');
-    const skipBtn = document.getElementById('skipBtn');
-    const btnGerman = document.getElementById('btnGerman');
-    const btnEnglish = document.getElementById('btnEnglish');
-    
-    const spotifyHeader = document.getElementById('spotifyHeader');
-    const spotifyContent = document.getElementById('spotifyContent');
-    const timerPanel = document.getElementById('timerPanel');
-    const timerHeader = document.getElementById('timerHeader');
-    const timerContent = document.getElementById('timerContent');
-    
-    const popupHeader = document.getElementById('popupHeader');
-    const popupContent = document.getElementById('popupContent');
-    const popupToggle = document.getElementById('popupToggle');
-    const popupPanel = document.getElementById('popupPanel');
-    const videoList = document.getElementById('videoList');
-    
-    let availableVideos = [];
-    let selectedVideos = [];
-    let popupActive = false;
     let currentLanguage = 'de';
-    
-    // ===== AUTHENTICATION =====
-    
-    // Generate random session ID
-    function generateSessionId() {
-      return 'session_' + Math.random().toString(36).substring(2, 15);
-    }
-    
-    // Login with TOTP code
-    async function login() {
-      const code = codeInput.value.trim();
-      
-      if (code.length !== 6 || !/^\d+$/.test(code)) {
-        errorMessage.classList.add('show');
-        return;
-      }
-      
-      sessionId = generateSessionId();
-      
-      try {
-        const res = await fetch(`${API_URL}/api/auth/verify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, sessionId })
-        });
-        const data = await res.json();
-        
-        if (data.success) {
-          currentUser = data.user;
-          showMainContainer();
-        } else {
-          errorMessage.classList.add('show');
-          codeInput.value = '';
-          codeInput.focus();
-        }
-      } catch (err) {
-        console.error('Login error:', err);
-        errorMessage.textContent = 'Connection error. Please try again.';
-        errorMessage.classList.add('show');
-      }
-    }
-    
-    function showMainContainer() {
-      loginScreen.classList.add('hidden');
-      mainContainer.classList.remove('hidden');
-      userProfileBox.classList.remove('hidden');
-      
-      // Set user profile
-      if (currentUser) {
-        userName.textContent = currentUser.name;
-        userAvatar.src = `/user/${currentUser.id}.png`;
-        userAvatar.onerror = () => {
-          userAvatar.src = '/user/none.png';
-        };
-      }
-      
-      initializeApp();
-    }
-    
-    // Login button
-    btnLogin.addEventListener('click', login);
-    
-    // Enter key in code input
-    codeInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        login();
-      }
-    });
-    
-    // Hide error on input
-    codeInput.addEventListener('input', () => {
-      errorMessage.classList.remove('show');
-    });
-    
-    // Always show login screen on page load (no session persistence)
-    (async () => {
-      // Don't check for existing session - always require login
-      loginScreen.classList.remove('hidden');
-    })();
-    
-    // ===== MAIN APP INITIALIZATION =====
-    
-    function initializeApp() {
-      checkSpotifyConnection();
-      loadVideos();
-      loadPopupState();
-      loadState();
-      setInterval(loadState, 500);
-      setInterval(loadPopupState, 3000);
-      setInterval(updateSpotifyStatus, 2000);
-    }
-    
-    // ===== PANEL COLLAPSE/EXPAND =====
-    
-    function togglePanel(header, content) {
-      const arrow = header.querySelector('.panel-arrow');
-      const title = header.querySelector('.panel-title');
-      const panel = header.parentElement;
-      const isCollapsed = content.classList.contains('collapsed');
-      
-      if (isCollapsed) {
-        content.classList.remove('collapsed');
-        arrow.classList.remove('collapsed');
-        header.classList.remove('collapsed');
-        panel.classList.remove('collapsed');
-        title.classList.add('hidden');
-      } else {
-        content.classList.add('collapsed');
-        arrow.classList.add('collapsed');
-        header.classList.add('collapsed');
-        panel.classList.add('collapsed');
-        title.classList.remove('hidden');
-      }
-    }
-    
-    spotifyHeader.addEventListener('click', () => {
-      togglePanel(spotifyHeader, spotifyContent);
-    });
-    
-    timerHeader.addEventListener('click', () => {
-      togglePanel(timerHeader, timerContent);
-    });
-    
-    popupHeader.addEventListener('click', () => {
-      togglePanel(popupHeader, popupContent);
-    });
-    
-    // ===== LANGUAGE SWITCH =====
-    
-    btnGerman.addEventListener('click', async () => {
-      currentLanguage = 'de';
-      btnGerman.classList.add('active');
-      btnEnglish.classList.remove('active');
-      await updateState({ language: 'de' });
-    });
-    
-    btnEnglish.addEventListener('click', async () => {
-      currentLanguage = 'en';
-      btnEnglish.classList.add('active');
-      btnGerman.classList.remove('active');
-      await updateState({ language: 'en' });
-    });
-    
-    // ===== SPOTIFY =====
-    
-    spotifyConnectBtn.addEventListener('click', () => {
-      window.open(`${API_URL}/spotify/login`, '_blank', 'width=500,height=700');
-      setTimeout(checkSpotifyConnection, 2000);
-    });
-    
-    async function checkSpotifyConnection() {
-      try {
-        const res = await fetch(`${API_URL}/api/spotify/state`, {
-          headers: { 'X-Session-Id': sessionId }
-        });
-        const data = await res.json();
-        
-        if (data.connected) {
-          spotifyConnected = true;
-          spotifyStatus.classList.add('hidden');
-          spotifyControls.classList.remove('hidden');
-          volumeSlider.value = data.volume;
-          volumeValue.textContent = data.volume;
-        }
-      } catch (err) {
-        console.error('Spotify check error:', err);
-      }
-    }
-    
-    async function updateSpotifyStatus() {
-      if (!spotifyConnected) return;
-      
-      try {
-        const res = await fetch(`${API_URL}/api/spotify/state`, {
-          headers: { 'X-Session-Id': sessionId }
-        });
-        const data = await res.json();
-        
-        if (data.isPlaying) {
-          spotifyPanel.classList.add('playing');
-        } else {
-          spotifyPanel.classList.remove('playing');
-        }
-      } catch (err) {
-        console.error('Spotify status error:', err);
-      }
-    }
-    
-    volumeSlider.addEventListener('input', async (e) => {
-      const volume = parseInt(e.target.value);
-      volumeValue.textContent = volume;
-      
-      try {
-        await fetch(`${API_URL}/api/spotify/volume`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-Session-Id': sessionId
-          },
-          body: JSON.stringify({ volume })
-        });
-      } catch (err) {
-        console.error('Volume error:', err);
-      }
-    });
-    
-    playPauseBtn.addEventListener('click', async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/spotify/playpause`, {
-          method: 'POST',
-          headers: { 'X-Session-Id': sessionId }
-        });
-        const data = await res.json();
-        
-        if (data.isPlaying) {
-          playPauseBtn.textContent = '❚❚';
-          playPauseBtn.classList.remove('paused');
-          playPauseBtn.classList.add('playing');
-        } else {
-          playPauseBtn.textContent = '▶︎';
-          playPauseBtn.classList.remove('playing');
-          playPauseBtn.classList.add('paused');
-        }
-      } catch (err) {
-        console.error('Play/Pause error:', err);
-      }
-    });
-    
-    skipBtn.addEventListener('click', async () => {
-      try {
-        await fetch(`${API_URL}/api/spotify/skip`, {
-          method: 'POST',
-          headers: { 'X-Session-Id': sessionId }
-        });
-      } catch (err) {
-        console.error('Skip error:', err);
-      }
-    });
-    
-    // ===== TIMER =====
     
     function formatTime(seconds) {
       const mins = Math.floor(seconds / 60);
@@ -1014,267 +101,44 @@
       const date = new Date(timestamp);
       const hours = date.getHours().toString().padStart(2, '0');
       const mins = date.getMinutes().toString().padStart(2, '0');
-      return `${hours}:${mins} Uhr`;
+      return currentLanguage === 'de' ? `${hours}:${mins} Uhr` : `${hours}:${mins}`;
     }
     
-    async function updateState(newState) {
+    async function updateDisplay() {
       try {
         const res = await fetch(`${API_URL}/api/state`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-Session-Id': sessionId
-          },
-          body: JSON.stringify(newState)
+          headers: { 'X-Session-Id': 'public-display' }
         });
-        currentState = await res.json();
-        updateUI();
-      } catch (err) {
-        console.error('Fehler beim Update:', err);
-      }
-    }
-    
-    async function loadState() {
-      if (!sessionId) return;
-      
-      try {
-        const res = await fetch(`${API_URL}/api/state`, {
-          headers: { 'X-Session-Id': sessionId }
-        });
-        currentState = await res.json();
+        const state = await res.json();
         
-        if (currentState.language) {
-          currentLanguage = currentState.language;
-          if (currentLanguage === 'de') {
-            btnGerman.classList.add('active');
-            btnEnglish.classList.remove('active');
-          } else if (currentLanguage === 'en') {
-            btnEnglish.classList.add('active');
-            btnGerman.classList.remove('active');
+        currentLanguage = state.language || 'de';
+        const t = translations[currentLanguage];
+        
+        const countdown = document.getElementById('countdown');
+        const progressBar = document.getElementById('progressBar');
+        const endTime = document.getElementById('endTime');
+        
+        if (!state.isRunning || state.remaining <= 0) {
+          countdown.textContent = t.starting;
+          progressBar.style.width = '0%';
+          endTime.textContent = state.wasSkipped ? t.skipped : '';
+        } else {
+          countdown.textContent = formatTime(state.remaining);
+          
+          const progress = ((state.duration - state.remaining) / state.duration) * 100;
+          progressBar.style.width = `${progress}%`;
+          
+          if (state.endTime) {
+            endTime.textContent = `${t.endsAt} ${formatEndTime(state.endTime)}`;
           }
         }
-        
-        updateUI();
       } catch (err) {
         console.error('Fehler beim Laden:', err);
       }
     }
     
-    function updateUI() {
-      if (!currentState) return;
-      
-      // Update timer border color based on running state
-      if (currentState.isRunning && !currentState.isPaused) {
-        timerPanel.classList.add('running');
-      } else {
-        timerPanel.classList.remove('running');
-      }
-      
-      if (currentState.isRunning) {
-        startBtn.classList.add('hidden');
-        pauseBtn.classList.remove('hidden');
-        resetBtn.classList.remove('hidden');
-        
-        if (currentState.isPaused) {
-          pauseBtn.textContent = '▶️ Resume';
-        } else {
-          pauseBtn.textContent = '⏸️ Pause';
-        }
-        
-        previewTime.textContent = formatTime(currentState.remaining);
-        if (currentState.endTime) {
-          previewEnd.textContent = `Resume: ${formatEndTime(currentState.endTime)}`;
-        }
-      } else {
-        startBtn.classList.remove('hidden');
-        pauseBtn.classList.add('hidden');
-        resetBtn.classList.add('hidden');
-        previewTime.textContent = '00:00';
-        previewEnd.textContent = 'Resume: --:-- ';
-      }
-    }
-    
-    function startCountdown() {
-      if (timerInterval) clearInterval(timerInterval);
-      
-      timerInterval = setInterval(async () => {
-        if (currentState && currentState.isRunning && !currentState.isPaused) {
-          const newRemaining = currentState.remaining - 1;
-          
-          if (newRemaining <= 0) {
-            clearInterval(timerInterval);
-            await updateState({
-              remaining: 0,
-              isRunning: false,
-              wasSkipped: false
-            });
-          } else {
-            await updateState({ remaining: newRemaining });
-          }
-        }
-      }, 1000);
-    }
-    
-    startBtn.addEventListener('click', async () => {
-      const minutes = parseInt(timeInput.value) || 5;
-      const duration = minutes * 60;
-      const endTime = new Date(Date.now() + duration * 1000).getTime();
-      
-      await updateState({
-        duration: duration,
-        remaining: duration,
-        endTime: endTime,
-        isRunning: true,
-        isPaused: false,
-        wasSkipped: false
-      });
-      
-      startCountdown();
-    });
-    
-    pauseBtn.addEventListener('click', async () => {
-      if (currentState.isPaused) {
-        await updateState({ isPaused: false });
-        startCountdown();
-      } else {
-        await updateState({ isPaused: true });
-        if (timerInterval) clearInterval(timerInterval);
-      }
-    });
-    
-    resetBtn.addEventListener('click', async () => {
-      if (timerInterval) clearInterval(timerInterval);
-      
-      await fetch(`${API_URL}/api/reset`, { 
-        method: 'POST',
-        headers: { 'X-Session-Id': sessionId }
-      });
-      await updateState({
-        duration: 0,
-        remaining: 0,
-        endTime: null,
-        isRunning: false,
-        isPaused: false,
-        wasSkipped: true
-      });
-    });
-    
-    // ===== POP-UP =====
-    
-    async function loadVideos() {
-      if (!sessionId) return;
-      
-      try {
-        const res = await fetch(`${API_URL}/api/popup/videos`, {
-          headers: { 'X-Session-Id': sessionId }
-        });
-        const data = await res.json();
-        availableVideos = data.videos || [];
-        renderVideoList();
-      } catch (err) {
-        console.error('Error loading videos:', err);
-      }
-    }
-    
-    function renderVideoList() {
-      if (availableVideos.length === 0) {
-        videoList.innerHTML = '<div class="no-videos">No videos found in /pop folder</div>';
-        return;
-      }
-      
-      videoList.innerHTML = '';
-      availableVideos.forEach(video => {
-        const item = document.createElement('div');
-        item.className = 'video-item';
-        
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'video-checkbox';
-        checkbox.id = `video-${video}`;
-        checkbox.checked = selectedVideos.includes(video);
-        
-        checkbox.addEventListener('change', (e) => {
-          if (e.target.checked) {
-            if (!selectedVideos.includes(video)) {
-              selectedVideos.push(video);
-            }
-          } else {
-            selectedVideos = selectedVideos.filter(v => v !== video);
-          }
-          savePopupState();
-        });
-        
-        const label = document.createElement('label');
-        label.className = 'video-name';
-        label.htmlFor = `video-${video}`;
-        label.textContent = video;
-        label.style.cursor = 'pointer';
-        
-        item.appendChild(checkbox);
-        item.appendChild(label);
-        videoList.appendChild(item);
-      });
-    }
-    
-    popupToggle.addEventListener('click', async () => {
-      popupActive = !popupActive;
-      
-      if (popupActive) {
-        popupToggle.classList.add('active');
-        popupPanel.classList.add('active');
-      } else {
-        popupToggle.classList.remove('active');
-        popupPanel.classList.remove('active');
-      }
-      
-      await savePopupState();
-    });
-    
-    async function savePopupState() {
-      if (!sessionId) return;
-      
-      try {
-        await fetch(`${API_URL}/api/popup/state`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-Session-Id': sessionId
-          },
-          body: JSON.stringify({
-            isActive: popupActive,
-            selectedVideos: selectedVideos
-          })
-        });
-      } catch (err) {
-        console.error('Error saving popup state:', err);
-      }
-    }
-    
-    async function loadPopupState() {
-      if (!sessionId) return;
-      
-      try {
-        const res = await fetch(`${API_URL}/api/popup/state`, {
-          headers: { 'X-Session-Id': sessionId }
-        });
-        const data = await res.json();
-        
-        popupActive = data.isActive || false;
-        selectedVideos = data.selectedVideos || [];
-        
-        if (popupActive) {
-          popupToggle.classList.add('active');
-          popupPanel.classList.add('active');
-        } else {
-          popupToggle.classList.remove('active');
-          popupPanel.classList.remove('active');
-        }
-        
-        renderVideoList();
-      } catch (err) {
-        console.error('Error loading popup state:', err);
-      }
-    }
+    setInterval(updateDisplay, 100);
+    updateDisplay();
   </script>
 </body>
 </html>
