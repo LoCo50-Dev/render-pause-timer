@@ -10,15 +10,10 @@ app.use(express.static('public'));
 
 // ===== AUTHENTICATION CONFIG =====
 // If TOTP_SECRET is exactly "NONE", authentication is disabled
-// Otherwise, TOTP authentication is required
-function getTotpSecret() {
+// Otherwise, TOTP authentication is required using the value from env
+function isAuthEnabled() {
   const totpSecret = process.env.TOTP_SECRET;
-  
-  if (!totpSecret || totpSecret === 'NONE') {
-    return null;
-  }
-  
-  return totpSecret;
+  return totpSecret && totpSecret !== 'NONE';
 }
 
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
@@ -86,28 +81,28 @@ function getUserInfo() {
 
 // Get instance info (no auth required - just tells auth status)
 app.get('/api/instance/info', (req, res) => {
-  const totpSecret = getTotpSecret();
   const userInfo = getUserInfo();
   
   res.json({
     userName: userInfo.name,
     userAvatar: userInfo.avatar,
-    authRequired: !!totpSecret
+    authRequired: isAuthEnabled()
   });
 });
 
 app.post('/api/auth/verify', (req, res) => {
   const { code, sessionId } = req.body;
-  const totpSecret = getTotpSecret();
+  const totpSecret = process.env.TOTP_SECRET; // Direct read from env
   const userInfo = getUserInfo();
   
   console.log('=== AUTH ATTEMPT ===');
   console.log('Received code:', code);
   console.log('Current user:', userInfo.name);
-  console.log('TOTP Secret from env:', totpSecret ? 'SET' : 'NOT SET (AUTH DISABLED)');
+  console.log('TOTP_SECRET from env:', totpSecret);
+  console.log('Auth status:', totpSecret === 'NONE' ? 'DISABLED' : 'ENABLED');
   
-  // Check if auth is disabled (TOTP_SECRET is NONE or not set)
-  if (!totpSecret) {
+  // Check if auth is disabled (TOTP_SECRET is exactly "NONE")
+  if (!totpSecret || totpSecret === 'NONE') {
     console.log('Auth disabled - auto-login');
     activeSessions.set(sessionId, true);
     return res.json({ 
@@ -116,7 +111,7 @@ app.post('/api/auth/verify', (req, res) => {
     });
   }
   
-  // Verify TOTP code
+  // Verify TOTP code with the secret from environment
   const verified = speakeasy.totp.verify({
     secret: totpSecret,
     encoding: 'base32',
@@ -443,10 +438,11 @@ app.get('/api/spotify/state', getUserFromSession, (req, res) => {
 });
 
 app.listen(PORT, () => {
-  const totpSecret = getTotpSecret();
   const userInfo = getUserInfo();
+  const totpSecret = process.env.TOTP_SECRET;
   
   console.log(`Server running on port ${PORT}`);
   console.log(`Current user: ${userInfo.name}`);
-  console.log(`Auth: ${totpSecret ? 'ENABLED (TOTP Secret set)' : 'DISABLED (TOTP_SECRET=NONE or not set)'}`);
+  console.log(`TOTP_SECRET value: ${totpSecret ? (totpSecret === 'NONE' ? 'NONE (Auth disabled)' : '[SET]') : '[NOT SET - Auth disabled]'}`);
+  console.log(`Auth: ${isAuthEnabled() ? 'ENABLED' : 'DISABLED'}`);
 });
