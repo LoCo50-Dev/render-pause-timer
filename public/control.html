@@ -942,8 +942,10 @@
         });
         const state = await res.json();
         
-        updateTimerUI(state.timer);
-        updateLanguageUI(state.language);
+        updateTimerUI(state);
+        if (state.language) {
+          updateLanguageUI(state.language);
+        }
       } catch (err) {
         console.error('Load state error:', err);
       }
@@ -957,7 +959,7 @@
       const pauseBtn = document.getElementById('pauseBtn');
       const resetBtn = document.getElementById('resetBtn');
       
-      if (timer.remaining > 0) {
+      if (timer.isRunning && timer.remaining > 0) {
         const mins = Math.floor(timer.remaining / 60);
         const secs = timer.remaining % 60;
         previewTime.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
@@ -968,6 +970,24 @@
         }
         
         timerPanel.classList.add('running');
+        startBtn.classList.add('hidden');
+        pauseBtn.classList.remove('hidden');
+        resetBtn.classList.remove('hidden');
+        
+        if (timer.isPaused) {
+          pauseBtn.textContent = '▶️ Resume';
+        } else {
+          pauseBtn.textContent = '⏸️ Pause';
+        }
+      } else {
+        previewTime.textContent = '00:00';
+        previewEnd.textContent = 'Resume: --:-- Uhr';
+        timerPanel.classList.remove('running');
+        startBtn.classList.remove('hidden');
+        pauseBtn.classList.add('hidden');
+        resetBtn.classList.add('hidden');
+      }
+    }
         startBtn.classList.add('hidden');
         pauseBtn.classList.remove('hidden');
         resetBtn.classList.remove('hidden');
@@ -1006,7 +1026,7 @@
           headers: getHeaders(),
           body: JSON.stringify(data)
         });
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 300));
         await loadState();
       } catch (err) {
         console.error('Update state error:', err);
@@ -1017,18 +1037,74 @@
     
     document.getElementById('startBtn').addEventListener('click', async () => {
       if (!sessionId) return;
+      isUpdating = true;
       const minutes = parseInt(document.getElementById('timeInput').value) || 5;
-      await updateState({ timer: { action: 'start', minutes } });
+      const seconds = minutes * 60;
+      
+      try {
+        await fetch(`${API_URL}/api/state`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({
+            duration: seconds,
+            remaining: seconds,
+            endTime: Date.now() + (seconds * 1000),
+            isPaused: false,
+            isRunning: true,
+            wasSkipped: false
+          })
+        });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        await loadState();
+      } catch (err) {
+        console.error('Start timer error:', err);
+      } finally {
+        isUpdating = false;
+      }
     });
     
     document.getElementById('pauseBtn').addEventListener('click', async () => {
       if (!sessionId) return;
-      await updateState({ timer: { action: 'pause' } });
+      isUpdating = true;
+      
+      try {
+        const res = await fetch(`${API_URL}/api/state`, {
+          headers: getHeaders()
+        });
+        const currentState = await res.json();
+        
+        await fetch(`${API_URL}/api/state`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({
+            isPaused: !currentState.isPaused
+          })
+        });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        await loadState();
+      } catch (err) {
+        console.error('Pause timer error:', err);
+      } finally {
+        isUpdating = false;
+      }
     });
     
     document.getElementById('resetBtn').addEventListener('click', async () => {
       if (!sessionId) return;
-      await updateState({ timer: { action: 'reset' } });
+      isUpdating = true;
+      
+      try {
+        await fetch(`${API_URL}/api/reset`, {
+          method: 'POST',
+          headers: getHeaders()
+        });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        await loadState();
+      } catch (err) {
+        console.error('Reset timer error:', err);
+      } finally {
+        isUpdating = false;
+      }
     });
     
     async function loadVideos() {
@@ -1089,8 +1165,8 @@
         });
         const data = await res.json();
         
-        popupActive = data.active;
-        selectedVideos = data.videos || [];
+        popupActive = data.isActive || false;
+        selectedVideos = data.selectedVideos || [];
         
         const toggle = document.getElementById('popupToggle');
         const panel = document.getElementById('popupPanel');
@@ -1126,12 +1202,15 @@
       }
       
       try {
-        await fetch(`${API_URL}/api/popup/toggle`, {
+        await fetch(`${API_URL}/api/popup/state`, {
           method: 'POST',
           headers: getHeaders(),
-          body: JSON.stringify({ active: popupActive })
+          body: JSON.stringify({ 
+            isActive: popupActive,
+            selectedVideos: selectedVideos
+          })
         });
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 300));
       } catch (err) {
         console.error('Toggle popup error:', err);
       } finally {
@@ -1143,12 +1222,15 @@
       if (!sessionId) return;
       isUpdating = true;
       try {
-        await fetch(`${API_URL}/api/popup/videos`, {
+        await fetch(`${API_URL}/api/popup/state`, {
           method: 'POST',
           headers: getHeaders(),
-          body: JSON.stringify({ videos: selectedVideos })
+          body: JSON.stringify({ 
+            isActive: popupActive,
+            selectedVideos: selectedVideos
+          })
         });
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 300));
       } catch (err) {
         console.error('Update popup videos error:', err);
       } finally {
