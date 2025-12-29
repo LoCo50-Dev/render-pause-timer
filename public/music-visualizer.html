@@ -103,6 +103,10 @@
   <script>
     const API_URL = window.location.origin;
     
+    // Get userId from URL parameter or use default
+    const urlParams = new URLSearchParams(window.location.search);
+    const userId = urlParams.get('user') || 'SD-A98DB'; // Default to first user
+    
     const nowPlaying = document.getElementById('nowPlaying');
     const coverImage = document.getElementById('coverImage');
     const trackName = document.getElementById('trackName');
@@ -112,9 +116,7 @@
     
     async function updateNowPlaying() {
       try {
-        const res = await fetch(`${API_URL}/api/spotify/current`, {
-          headers: { 'X-Session-Id': 'public-display' }
-        });
+        const res = await fetch(`${API_URL}/api/spotify/current/public/${userId}`);
         const data = await res.json();
         
         if (data.error || !data.name) {
