@@ -19,6 +19,12 @@ const USERS = [
     name: '@ExplorerLoCo50',
     ytId: 'ABC123XYZ'
   }
+const USERS = [
+  {
+    id: 'none',
+    name: 'guest',
+    ytId: 'ABC123XYZ'
+  }
   // Weitere User hier hinzufügen:
   // {
   //   id: 'USER002',
