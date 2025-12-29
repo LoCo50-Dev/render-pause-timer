@@ -100,7 +100,6 @@
       <div class="spotify-logo">🎵 Spotify</div>
     </div>
   </div>
-
   <script>
     const API_URL = window.location.origin;
     
@@ -113,7 +112,9 @@
     
     async function updateNowPlaying() {
       try {
-        const res = await fetch(`${API_URL}/api/spotify/current`);
+        const res = await fetch(`${API_URL}/api/spotify/current`, {
+          headers: { 'X-Session-Id': 'public-display' }
+        });
         const data = await res.json();
         
         if (data.error || !data.name) {
