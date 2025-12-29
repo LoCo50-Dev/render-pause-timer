@@ -22,13 +22,28 @@
       min-height: 100vh;
     }
     
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      width: 100%;
+      max-width: 320px;
+    }
+    
     .control-panel {
       background: #2a2a2a;
       border-radius: 15px;
       padding: 25px;
-      max-width: 320px;
       width: 100%;
       box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    
+    .spotify-panel {
+      border: 2px solid #1DB954;
+    }
+    
+    .timer-panel {
+      border: 2px solid #4CAF50;
     }
     
     h1 {
@@ -245,11 +260,9 @@
   </style>
 </head>
 <body>
-  <div class="control-panel">
-    <h1>⏸️ Pause Timer Control</h1>
-    
-    <!-- Spotify Control Section -->
-    <div class="spotify-section">
+  <div class="container">
+    <!-- Spotify Control Box -->
+    <div class="control-panel spotify-panel">
       <div class="spotify-status" id="spotifyStatus">
         <button class="btn-spotify-connect" id="spotifyConnectBtn">🎵 Spotify verbinden</button>
       </div>
@@ -267,21 +280,23 @@
       </div>
     </div>
     
-    <!-- Timer Preview Section -->
-    <div class="preview">
-      <div class="preview-time" id="previewTime">00:00</div>
-      <div class="preview-end" id="previewEnd">Resume: --:-- Uhr</div>
-    </div>
-    
-    <div class="input-group">
-      <label for="timeInput">Zeit in Minuten:</label>
-      <input type="number" id="timeInput" min="1" placeholder="z.B. 5" value="5">
-    </div>
-    
-    <div class="button-group">
-      <button class="btn-start" id="startBtn">▶️ Start</button>
-      <button class="btn-pause hidden" id="pauseBtn">⏸️ Pause</button>
-      <button class="btn-reset hidden" id="resetBtn">⏹️ Reset</button>
+    <!-- Timer Control Box -->
+    <div class="control-panel timer-panel">
+      <div class="preview">
+        <div class="preview-time" id="previewTime">00:00</div>
+        <div class="preview-end" id="previewEnd">Resume: --:-- Uhr</div>
+      </div>
+      
+      <div class="input-group">
+        <label for="timeInput">Zeit in Minuten:</label>
+        <input type="number" id="timeInput" min="1" placeholder="z.B. 5" value="5">
+      </div>
+      
+      <div class="button-group">
+        <button class="btn-start" id="startBtn">▶️ Start</button>
+        <button class="btn-pause hidden" id="pauseBtn">⏸️ Pause</button>
+        <button class="btn-reset hidden" id="resetBtn">⏹️ Reset</button>
+      </div>
     </div>
   </div>
 
