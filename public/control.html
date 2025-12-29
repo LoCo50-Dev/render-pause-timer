@@ -717,7 +717,6 @@
     let currentState = null;
     let spotifyConnected = false;
     let sessionId = null;
-    let currentUser = null;
     
     // Elements
     const loginScreen = document.getElementById('loginScreen');
@@ -770,6 +769,35 @@
       return 'session_' + Math.random().toString(36).substring(2, 15);
     }
     
+    // Check if auth is required on page load
+    async function checkAuthStatus() {
+      try {
+        const res = await fetch(`${API_URL}/api/instance/info`);
+        const data = await res.json();
+        
+        if (!data.authRequired) {
+          // Auth disabled, auto-login
+          sessionId = generateSessionId();
+          const loginRes = await fetch(`${API_URL}/api/auth/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: '000000', sessionId })
+          });
+          const loginData = await loginRes.json();
+          
+          if (loginData.success) {
+            showMainContainer(loginData.user);
+          }
+        } else {
+          // Auth required, show login screen
+          loginScreen.classList.remove('hidden');
+        }
+      } catch (err) {
+        console.error('Auth check error:', err);
+        loginScreen.classList.remove('hidden');
+      }
+    }
+    
     async function login() {
       const code = codeInput.value.trim();
       
@@ -789,8 +817,7 @@
         const data = await res.json();
         
         if (data.success) {
-          currentUser = data.user;
-          showMainContainer();
+          showMainContainer(data.user);
         } else {
           errorMessage.classList.add('show');
           codeInput.value = '';
@@ -803,14 +830,14 @@
       }
     }
     
-    function showMainContainer() {
+    function showMainContainer(user) {
       loginScreen.classList.add('hidden');
       mainContainer.classList.remove('hidden');
       userProfileBox.classList.remove('hidden');
       
-      if (currentUser) {
-        userName.textContent = currentUser.name;
-        userAvatar.src = `/user/${currentUser.id}.png`;
+      if (user) {
+        userName.textContent = user.name;
+        userAvatar.src = `/user/${user.avatar}`;
         userAvatar.onerror = () => {
           userAvatar.src = '/user/none.png';
         };
@@ -831,9 +858,8 @@
       errorMessage.classList.remove('show');
     });
     
-    (async () => {
-      loginScreen.classList.remove('hidden');
-    })();
+    // Check auth status on load
+    checkAuthStatus();
     
     // ===== MAIN APP =====
     
@@ -957,315 +983,4 @@
           body: JSON.stringify({ volume })
         });
       } catch (err) {
-        console.error('Volume error:', err);
-      }
-    });
-    
-    playPauseBtn.addEventListener('click', async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/spotify/playpause`, {
-          method: 'POST',
-          headers: { 'X-Session-Id': sessionId }
-        });
-        const data = await res.json();
-        
-        if (data.isPlaying) {
-          playPauseBtn.textContent = '❚❚';
-          playPauseBtn.classList.remove('paused');
-          playPauseBtn.classList.add('playing');
-        } else {
-          playPauseBtn.textContent = '▶︎';
-          playPauseBtn.classList.remove('playing');
-          playPauseBtn.classList.add('paused');
-        }
-      } catch (err) {
-        console.error('Play/Pause error:', err);
-      }
-    });
-    
-    skipBtn.addEventListener('click', async () => {
-      try {
-        await fetch(`${API_URL}/api/spotify/skip`, {
-          method: 'POST',
-          headers: { 'X-Session-Id': sessionId }
-        });
-      } catch (err) {
-        console.error('Skip error:', err);
-      }
-    });
-    
-    // ===== TIMER =====
-    
-    function formatTime(seconds) {
-      const mins = Math.floor(seconds / 60);
-      const secs = seconds % 60;
-      return `${mins}:${secs.toString().padStart(2, '0')}`;
-    }
-    
-    function formatEndTime(timestamp) {
-      const date = new Date(timestamp);
-      const hours = date.getHours().toString().padStart(2, '0');
-      const mins = date.getMinutes().toString().padStart(2, '0');
-      return `${hours}:${mins} Uhr`;
-    }
-    
-    async function updateState(newState) {
-      try {
-        const res = await fetch(`${API_URL}/api/state`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-Session-Id': sessionId
-          },
-          body: JSON.stringify(newState)
-        });
-        currentState = await res.json();
-        updateUI();
-      } catch (err) {
-        console.error('Update error:', err);
-      }
-    }
-    
-    async function loadState() {
-      if (!sessionId) return;
-      
-      try {
-        const res = await fetch(`${API_URL}/api/state`, {
-          headers: { 'X-Session-Id': sessionId }
-        });
-        currentState = await res.json();
-        
-        if (currentState.language) {
-          currentLanguage = currentState.language;
-          if (currentLanguage === 'de') {
-            btnGerman.classList.add('active');
-            btnEnglish.classList.remove('active');
-          } else if (currentLanguage === 'en') {
-            btnEnglish.classList.add('active');
-            btnGerman.classList.remove('active');
-          }
-        }
-        
-        updateUI();
-      } catch (err) {
-        console.error('Load error:', err);
-      }
-    }
-    
-    function updateUI() {
-      if (!currentState) return;
-      
-      if (currentState.isRunning && !currentState.isPaused) {
-        timerPanel.classList.add('running');
-      } else {
-        timerPanel.classList.remove('running');
-      }
-      
-      if (currentState.isRunning) {
-        startBtn.classList.add('hidden');
-        pauseBtn.classList.remove('hidden');
-        resetBtn.classList.remove('hidden');
-        
-        if (currentState.isPaused) {
-          pauseBtn.textContent = '▶️ Resume';
-        } else {
-          pauseBtn.textContent = '⏸️ Pause';
-        }
-        
-        previewTime.textContent = formatTime(currentState.remaining);
-        if (currentState.endTime) {
-          previewEnd.textContent = `Resume: ${formatEndTime(currentState.endTime)}`;
-        }
-      } else {
-        startBtn.classList.remove('hidden');
-        pauseBtn.classList.add('hidden');
-        resetBtn.classList.add('hidden');
-        previewTime.textContent = '00:00';
-        previewEnd.textContent = 'Resume: --:-- ';
-      }
-    }
-    
-    function startCountdown() {
-      if (timerInterval) clearInterval(timerInterval);
-      
-      timerInterval = setInterval(async () => {
-        if (currentState && currentState.isRunning && !currentState.isPaused) {
-          const newRemaining = currentState.remaining - 1;
-          
-          if (newRemaining <= 0) {
-            clearInterval(timerInterval);
-            await updateState({
-              remaining: 0,
-              isRunning: false,
-              wasSkipped: false
-            });
-          } else {
-            await updateState({ remaining: newRemaining });
-          }
-        }
-      }, 1000);
-    }
-    
-    startBtn.addEventListener('click', async () => {
-      const minutes = parseInt(timeInput.value) || 5;
-      const duration = minutes * 60;
-      const endTime = new Date(Date.now() + duration * 1000).getTime();
-      
-      await updateState({
-        duration: duration,
-        remaining: duration,
-        endTime: endTime,
-        isRunning: true,
-        isPaused: false,
-        wasSkipped: false
-      });
-      
-      startCountdown();
-    });
-    
-    pauseBtn.addEventListener('click', async () => {
-      if (currentState.isPaused) {
-        await updateState({ isPaused: false });
-        startCountdown();
-      } else {
-        await updateState({ isPaused: true });
-        if (timerInterval) clearInterval(timerInterval);
-      }
-    });
-    
-    resetBtn.addEventListener('click', async () => {
-      if (timerInterval) clearInterval(timerInterval);
-      
-      await fetch(`${API_URL}/api/reset`, { 
-        method: 'POST',
-        headers: { 'X-Session-Id': sessionId }
-      });
-      await updateState({
-        duration: 0,
-        remaining: 0,
-        endTime: null,
-        isRunning: false,
-        isPaused: false,
-        wasSkipped: true
-      });
-    });
-    
-    // ===== POP-UP =====
-    
-    async function loadVideos() {
-      if (!sessionId) return;
-      
-      try {
-        const res = await fetch(`${API_URL}/api/popup/videos`, {
-          headers: { 'X-Session-Id': sessionId }
-        });
-        const data = await res.json();
-        availableVideos = data.videos || [];
-        renderVideoList();
-      } catch (err) {
-        console.error('Error loading videos:', err);
-      }
-    }
-    
-    function renderVideoList() {
-      if (availableVideos.length === 0) {
-        videoList.innerHTML = '<div class="no-videos">No videos found in /pop folder</div>';
-        return;
-      }
-      
-      videoList.innerHTML = '';
-      availableVideos.forEach(video => {
-        const item = document.createElement('div');
-        item.className = 'video-item';
-        
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'video-checkbox';
-        checkbox.id = `video-${video}`;
-        checkbox.checked = selectedVideos.includes(video);
-        
-        checkbox.addEventListener('change', (e) => {
-          if (e.target.checked) {
-            if (!selectedVideos.includes(video)) {
-              selectedVideos.push(video);
-            }
-          } else {
-            selectedVideos = selectedVideos.filter(v => v !== video);
-          }
-          savePopupState();
-        });
-        
-        const label = document.createElement('label');
-        label.className = 'video-name';
-        label.htmlFor = `video-${video}`;
-        label.textContent = video;
-        label.style.cursor = 'pointer';
-        
-        item.appendChild(checkbox);
-        item.appendChild(label);
-        videoList.appendChild(item);
-      });
-    }
-    
-    popupToggle.addEventListener('click', async () => {
-      popupActive = !popupActive;
-      
-      if (popupActive) {
-        popupToggle.classList.add('active');
-        popupPanel.classList.add('active');
-      } else {
-        popupToggle.classList.remove('active');
-        popupPanel.classList.remove('active');
-      }
-      
-      await savePopupState();
-    });
-    
-    async function savePopupState() {
-      if (!sessionId) return;
-      
-      try {
-        await fetch(`${API_URL}/api/popup/state`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-Session-Id': sessionId
-          },
-          body: JSON.stringify({
-            isActive: popupActive,
-            selectedVideos: selectedVideos
-          })
-        });
-      } catch (err) {
-        console.error('Error saving popup state:', err);
-      }
-    }
-    
-    async function loadPopupState() {
-      if (!sessionId) return;
-      
-      try {
-        const res = await fetch(`${API_URL}/api/popup/state`, {
-          headers: { 'X-Session-Id': sessionId }
-        });
-        const data = await res.json();
-        
-        popupActive = data.isActive || false;
-        selectedVideos = data.selectedVideos || [];
-        
-        if (popupActive) {
-          popupToggle.classList.add('active');
-          popupPanel.classList.add('active');
-        } else {
-          popupToggle.classList.remove('active');
-          popupPanel.classList.remove('active');
-        }
-        
-        renderVideoList();
-      } catch (err) {
-        console.error('Error loading popup state:', err);
-      }
-    }
-  </script>
-</body>
-</html>
+        console.error('Volume
