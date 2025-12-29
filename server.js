@@ -32,7 +32,8 @@ let userState = {
     isRunning: false,
     wasSkipped: false,
     language: 'de',
-    autoExtendTime: null
+    autoExtendTime: null,
+    lastUpdateTime: null // NEW: Track last update for accurate countdown
   },
   spotify: {
     accessToken: null,
@@ -149,18 +150,66 @@ function getUserFromSession(req, res, next) {
 
 // ===== TIMER STATE =====
 
+// NEW: Function to calculate current remaining time based on endTime
+function calculateRemainingTime() {
+  const timer = userState.timer;
+  
+  if (!timer.isRunning || timer.isPaused) {
+    return timer.remaining;
+  }
+  
+  if (!timer.endTime) {
+    return timer.remaining;
+  }
+  
+  const now = Date.now();
+  const remaining = Math.max(0, Math.floor((timer.endTime - now) / 1000));
+  
+  return remaining;
+}
+
 // Public endpoint for countdown display (no auth required)
 app.get('/api/state/public', (req, res) => {
-  res.json(userState.timer);
+  const timer = { ...userState.timer };
+  timer.remaining = calculateRemainingTime();
+  res.json(timer);
 });
 
 app.get('/api/state', getUserFromSession, (req, res) => {
-  res.json(userState.timer);
+  const timer = { ...userState.timer };
+  timer.remaining = calculateRemainingTime();
+  res.json(timer);
 });
 
 app.post('/api/state', getUserFromSession, (req, res) => {
-  userState.timer = { ...userState.timer, ...req.body };
-  res.json(userState.timer);
+  const updates = req.body;
+  
+  // If starting a new timer, set lastUpdateTime
+  if (updates.isRunning && updates.endTime) {
+    updates.lastUpdateTime = Date.now();
+  }
+  
+  // If pausing, save current remaining time
+  if (updates.isPaused !== undefined && updates.isPaused === true) {
+    const currentRemaining = calculateRemainingTime();
+    updates.remaining = currentRemaining;
+    updates.endTime = null; // Clear endTime when paused
+    updates.lastUpdateTime = Date.now();
+  }
+  
+  // If resuming, recalculate endTime based on remaining
+  if (updates.isPaused !== undefined && updates.isPaused === false && userState.timer.isPaused) {
+    const currentRemaining = userState.timer.remaining;
+    updates.endTime = Date.now() + (currentRemaining * 1000);
+    updates.lastUpdateTime = Date.now();
+  }
+  
+  userState.timer = { ...userState.timer, ...updates };
+  
+  const response = { ...userState.timer };
+  response.remaining = calculateRemainingTime();
+  
+  res.json(response);
 });
 
 app.post('/api/reset', getUserFromSession, (req, res) => {
@@ -172,12 +221,13 @@ app.post('/api/reset', getUserFromSession, (req, res) => {
     isRunning: false,
     wasSkipped: false,
     autoExtendTime: null,
+    lastUpdateTime: null,
     language: userState.timer.language || 'de'
   };
   res.json(userState.timer);
 });
 
-// Auto-extend timer after 30 seconds
+// Timer countdown and auto-extend logic
 setInterval(() => {
   const timer = userState.timer;
   
@@ -185,6 +235,10 @@ setInterval(() => {
     return;
   }
   
+  // Update remaining time based on endTime
+  timer.remaining = calculateRemainingTime();
+  
+  // Auto-extend after timer reaches 0
   if (timer.remaining <= 0 && !timer.autoExtendTime) {
     timer.autoExtendTime = Date.now() + 30000;
     console.log('Timer ended. Auto-extend in 30 seconds...');
@@ -196,6 +250,7 @@ setInterval(() => {
     timer.remaining = extension;
     timer.endTime = Date.now() + (extension * 1000);
     timer.autoExtendTime = null;
+    timer.lastUpdateTime = Date.now();
     console.log('Timer auto-extended by 5 minutes');
   }
 }, 1000);
