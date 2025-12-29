@@ -693,7 +693,7 @@
     const userName = document.getElementById('userName');
     
     function generateSessionId() {
-      return 'session_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      return 'session_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Date.now();
     }
     
     function getHeaders() {
@@ -752,6 +752,7 @@
         const data = await res.json();
         
         if (data.success) {
+          errorMessage.classList.remove('show');
           showMainContainer(data.user);
         } else {
           errorMessage.classList.add('show');
@@ -836,6 +837,7 @@
     });
     
     document.getElementById('btnGerman').addEventListener('click', async () => {
+      if (!sessionId) return;
       currentLanguage = 'de';
       document.getElementById('btnGerman').classList.add('active');
       document.getElementById('btnEnglish').classList.remove('active');
@@ -843,6 +845,7 @@
     });
     
     document.getElementById('btnEnglish').addEventListener('click', async () => {
+      if (!sessionId) return;
       currentLanguage = 'en';
       document.getElementById('btnEnglish').classList.add('active');
       document.getElementById('btnGerman').classList.remove('active');
@@ -884,10 +887,16 @@
         const data = await res.json();
         
         const panel = document.getElementById('spotifyPanel');
+        const btn = document.getElementById('playPauseBtn');
+        
         if (data.isPlaying) {
           panel.classList.add('playing');
+          btn.classList.remove('paused');
+          btn.classList.add('playing');
         } else {
           panel.classList.remove('playing');
+          btn.classList.remove('playing');
+          btn.classList.add('paused');
         }
       } catch (err) {
         console.error('Spotify status error:', err);
@@ -917,6 +926,7 @@
           method: 'POST',
           headers: getHeaders()
         });
+        setTimeout(updateSpotifyStatus, 200);
       } catch (err) {
         console.error('Play/Pause error:', err);
       }
@@ -975,24 +985,6 @@
         resetBtn.classList.remove('hidden');
         
         if (timer.isPaused) {
-          pauseBtn.textContent = '▶️ Resume';
-        } else {
-          pauseBtn.textContent = '⏸️ Pause';
-        }
-      } else {
-        previewTime.textContent = '00:00';
-        previewEnd.textContent = 'Resume: --:-- Uhr';
-        timerPanel.classList.remove('running');
-        startBtn.classList.remove('hidden');
-        pauseBtn.classList.add('hidden');
-        resetBtn.classList.add('hidden');
-      }
-    }
-        startBtn.classList.add('hidden');
-        pauseBtn.classList.remove('hidden');
-        resetBtn.classList.remove('hidden');
-        
-        if (timer.paused) {
           pauseBtn.textContent = '▶️ Resume';
         } else {
           pauseBtn.textContent = '⏸️ Pause';
