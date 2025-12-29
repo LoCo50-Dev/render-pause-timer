@@ -76,10 +76,6 @@
   <script>
     const API_URL = window.location.origin;
     
-    // Get userId from URL parameter or use default
-    const urlParams = new URLSearchParams(window.location.search);
-    const userId = urlParams.get('user') || 'SD-A98DB'; // Default to first user
-    
     const translations = {
       de: {
         starting: 'Stream beginnt in Kürze',
@@ -110,7 +106,7 @@
     
     async function updateDisplay() {
       try {
-        const res = await fetch(`${API_URL}/api/state/public/${userId}`);
+        const res = await fetch(`${API_URL}/api/state/public`);
         const state = await res.json();
         
         currentLanguage = state.language || 'de';
