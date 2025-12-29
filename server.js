@@ -9,26 +9,21 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // ===== USER CONFIGURATION =====
-// Füge hier neue User hinzu. Jeder User braucht:
-// - id: Eindeutiger Code (wird für Ordner verwendet, z.B. "SD-A98DB")
-// - name: Anzeigename (wird im UI angezeigt, z.B. "@ExplorerLoCo50")
-// - ytId: Wird automatisch aus process.env.YT_ID geladen
+// Einfache User-Struktur: nur ID und Name
+// YT_ID wird aus dem ENV geladen und einem User zugeordnet
 const USERS = [
   {
-    id: 'SD-A98DB',
-    name: '@ExplorerLoCo50',
-    ytId: process.env.YT_ID || 'none'
+    id: 'SD-A98DB',           // User ID für Ordner (z.B. /pop/SD-A98DB/)
+    name: '@ExplorerLoCo50'   // Anzeigename im UI
   },
   {
-    id: 'none',
-    name: 'Guest',
-    ytId: 'none'
+    id: 'none',               // Fallback User wenn keine YT_ID gesetzt
+    name: 'Guest'
   }
-  // Weitere User hier hinzufügen:
+  // Weitere User hinzufügen:
   // {
   //   id: 'SD-XYZ123',
-  //   name: '@AnotherStreamer',
-  //   ytId: process.env.YT_ID || 'none'
+  //   name: '@AnotherStreamer'
   // }
 ];
 
@@ -36,12 +31,23 @@ const USERS = [
 const TOTP_SECRET = process.env.TOTP_SECRET;
 const AUTH_DISABLED = TOTP_SECRET === 'NONE';
 
+// YT_ID aus Environment - wird verwendet um den aktuellen User zu bestimmen
+const YT_ID = process.env.YT_ID || 'none';
+
+// Finde den User basierend auf YT_ID
+function getCurrentUser() {
+  // Suche User dessen ID mit YT_ID übereinstimmt
+  const user = USERS.find(u => u.id === YT_ID);
+  // Fallback zu 'none' User wenn nicht gefunden
+  return user || USERS.find(u => u.id === 'none');
+}
+
 // Spotify API Configuration
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://lc5-streamdesk.onrender.com/callback';
 
-// Session Store
+// Session Store (wird bei jedem Neustart geleert)
 const activeSessions = new Map();
 
 // In-Memory State (per user)
@@ -88,19 +94,20 @@ const VIDEO_INTERVAL = 10 * 60 * 1000;
 app.post('/api/auth/verify', (req, res) => {
   const { code, sessionId } = req.body;
   
-  // If auth is disabled, auto-approve with YT_ID user
+  const currentUser = getCurrentUser();
+  
+  // If auth is disabled (TOTP_SECRET=NONE), auto-approve
   if (AUTH_DISABLED) {
-    const ytId = process.env.YT_ID || 'none';
-    const user = USERS.find(u => u.ytId === ytId) || USERS.find(u => u.id === 'none');
-    activeSessions.set(sessionId, user.id);
+    activeSessions.set(sessionId, currentUser.id);
     return res.json({ 
       success: true, 
-      user: { id: user.id, name: user.name, ytId: user.ytId } 
+      user: { id: currentUser.id, name: currentUser.name } 
     });
   }
   
   console.log('=== AUTH ATTEMPT ===');
   console.log('Received code:', code);
+  console.log('Current user:', currentUser.name, '(', currentUser.id, ')');
   
   if (!TOTP_SECRET) {
     console.log('ERROR: TOTP_SECRET not set');
@@ -118,23 +125,19 @@ app.post('/api/auth/verify', (req, res) => {
   console.log('===================');
   
   if (verified) {
-    const ytId = process.env.YT_ID || 'none';
-    const user = USERS.find(u => u.ytId === ytId) || USERS.find(u => u.id === 'none');
-    activeSessions.set(sessionId, user.id);
+    activeSessions.set(sessionId, currentUser.id);
     res.json({ 
       success: true, 
-      user: { id: user.id, name: user.name, ytId: user.ytId } 
+      user: { id: currentUser.id, name: currentUser.name } 
     });
   } else {
     res.json({ success: false, error: 'Invalid code' });
   }
 });
 
-// Check if session is valid
+// Check if session is valid (not used anymore - always require new login)
 app.post('/api/auth/check', (req, res) => {
-  const { sessionId } = req.body;
-  
-  // Sessions expire on every new page load - always return invalid
+  // Sessions don't persist - always return invalid
   res.json({ valid: false });
 });
 
@@ -158,8 +161,7 @@ app.get('/api/auth/user', (req, res) => {
   
   res.json({
     id: user.id,
-    name: user.name,
-    ytId: user.ytId
+    name: user.name
   });
 });
 
@@ -482,6 +484,7 @@ app.get('/api/spotify/state', getUserFromSession, (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Auth mode: ${AUTH_DISABLED ? 'DISABLED (TOTP_SECRET=NONE)' : 'ENABLED'}`);
-  console.log(`YT_ID from env: ${process.env.YT_ID || 'none'}`);
-  console.log(`Registered users: ${USERS.map(u => `${u.name} (${u.id})`).join(', ')}`);
+  console.log(`YT_ID from env: ${YT_ID}`);
+  console.log(`Current user: ${getCurrentUser().name} (${getCurrentUser().id})`);
+  console.log(`All users: ${USERS.map(u => `${u.name} (${u.id})`).join(', ')}`);
 });
