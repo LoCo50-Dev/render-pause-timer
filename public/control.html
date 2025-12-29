@@ -129,7 +129,7 @@
         #ff0000
       );
       background-size: 300% 100%;
-      animation: rainbow-flow 6s linear infinite;
+      animation: rainbow-flow 15s linear infinite;
     }
     
     .user-profile-inner {
@@ -726,8 +726,6 @@
     const btnLogin = document.getElementById('btnLogin');
     const errorMessage = document.getElementById('errorMessage');
     const userProfileBox = document.getElementById('userProfileBox');
-    const userAvatar = document.getElementById('userAvatar');
-    const userName = document.getElementById('userName');
     
     const startBtn = document.getElementById('startBtn');
     const pauseBtn = document.getElementById('pauseBtn');
@@ -810,13 +808,18 @@
       mainContainer.classList.remove('hidden');
       userProfileBox.classList.remove('hidden');
       
-      // Set user profile
+      // Set user profile - find elements inside the inner div
       if (currentUser) {
-        userName.textContent = currentUser.name;
-        userAvatar.src = `/user/${currentUser.id}.png`;
-        userAvatar.onerror = () => {
-          userAvatar.src = '/user/none.png';
-        };
+        const innerAvatar = userProfileBox.querySelector('.user-avatar');
+        const innerName = userProfileBox.querySelector('.user-name');
+        
+        if (innerName) innerName.textContent = currentUser.name;
+        if (innerAvatar) {
+          innerAvatar.src = `/user/${currentUser.id}.png`;
+          innerAvatar.onerror = () => {
+            innerAvatar.src = '/user/none.png';
+          };
+        }
       }
       
       initializeApp();
