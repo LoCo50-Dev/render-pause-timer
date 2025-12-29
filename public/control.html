@@ -104,53 +104,49 @@
       top: 20px;
       left: 50%;
       transform: translateX(-50%);
+      padding: 3px;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      z-index: 1000;
+      border-radius: 18px;
+      background: linear-gradient(
+        90deg,
+        #ff0000,
+        #ff7f00,
+        #ffff00,
+        #00ff00,
+        #0000ff,
+        #4b0082,
+        #9400d3,
+        #ff0000,
+        #ff7f00,
+        #ffff00,
+        #00ff00,
+        #0000ff,
+        #4b0082,
+        #9400d3,
+        #ff0000
+      );
+      background-size: 300% 100%;
+      animation: rainbow-flow 6s linear infinite;
+    }
+    
+    .user-profile-inner {
       background: #2a2a2a;
       border-radius: 15px;
       padding: 10px 20px;
       display: flex;
       align-items: center;
       gap: 12px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-      z-index: 1000;
-      border: 3px solid;
-      border-image: linear-gradient(90deg, 
-        red, 
-        orange, 
-        yellow, 
-        green, 
-        blue, 
-        indigo, 
-        violet,
-        red
-      ) 1;
-      animation: rainbow-border 4s linear infinite;
-      background-clip: padding-box;
     }
     
-    @keyframes rainbow-border {
+    @keyframes rainbow-flow {
       0% {
-        border-image-source: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet, red);
-      }
-      14% {
-        border-image-source: linear-gradient(90deg, orange, yellow, green, blue, indigo, violet, red, orange);
-      }
-      28% {
-        border-image-source: linear-gradient(90deg, yellow, green, blue, indigo, violet, red, orange, yellow);
-      }
-      42% {
-        border-image-source: linear-gradient(90deg, green, blue, indigo, violet, red, orange, yellow, green);
-      }
-      57% {
-        border-image-source: linear-gradient(90deg, blue, indigo, violet, red, orange, yellow, green, blue);
-      }
-      71% {
-        border-image-source: linear-gradient(90deg, indigo, violet, red, orange, yellow, green, blue, indigo);
-      }
-      85% {
-        border-image-source: linear-gradient(90deg, violet, red, orange, yellow, green, blue, indigo, violet);
+        background-position: 0% 0%;
       }
       100% {
-        border-image-source: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet, red);
+        background-position: 300% 0%;
       }
     }
     
@@ -625,8 +621,10 @@
 
   <!-- USER PROFILE BOX -->
   <div class="user-profile-box hidden" id="userProfileBox">
-    <img src="/user/none.png" alt="User Avatar" class="user-avatar" id="userAvatar">
-    <span class="user-name" id="userName">Guest</span>
+    <div class="user-profile-inner">
+      <img src="/user/none.png" alt="User Avatar" class="user-avatar" id="userAvatar">
+      <span class="user-name" id="userName">Guest</span>
+    </div>
   </div>
 
   <!-- MAIN CONTAINER -->
