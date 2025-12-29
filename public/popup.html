@@ -78,22 +78,25 @@
     <video id="popupVideo" autoplay muted></video>
     <div class="no-video" id="noVideo"></div>
   </div>
-
   <script>
     const API_URL = window.location.origin;
     const videoElement = document.getElementById('popupVideo');
     const noVideoElement = document.getElementById('noVideo');
     
+    // Get userId from URL parameter or use YT_ID
+    const urlParams = new URLSearchParams(window.location.search);
+    const userId = urlParams.get('user') || 'SD-A98DB'; // Default to first user
+    
     let currentVideoUrl = null;
     
     async function checkCurrentVideo() {
       try {
-        const res = await fetch(`${API_URL}/api/popup/current`);
+        const res = await fetch(`${API_URL}/api/popup/current/${userId}`);
         const data = await res.json();
         
         if (data.currentVideo && data.currentVideo !== currentVideoUrl) {
           currentVideoUrl = data.currentVideo;
-          videoElement.src = `/pop/${data.currentVideo}`;
+          videoElement.src = `/pop/${userId}/${data.currentVideo}`;
           videoElement.classList.add('active');
           noVideoElement.style.opacity = '0';
           
