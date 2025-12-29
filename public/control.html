@@ -46,6 +46,37 @@
       border: 2px solid #4CAF50;
     }
     
+    .language-panel {
+      border: 2px solid #FF9800;
+      padding: 15px;
+    }
+    
+    .language-buttons {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .btn-language {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid #3a3a3a;
+      border-radius: 8px;
+      font-size: 24px;
+      cursor: pointer;
+      background: #1a1a1a;
+      transition: all 0.3s;
+    }
+    
+    .btn-language.active {
+      border-color: #FF9800;
+      background: #2a2a2a;
+      box-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
+    }
+    
+    .btn-language:hover {
+      background: #2a2a2a;
+    }
+    
     h1 {
       display: none;
     }
@@ -261,15 +292,23 @@
 </head>
 <body>
   <div class="container">
+    <!-- Language Control Box -->
+    <div class="control-panel language-panel">
+      <div class="language-buttons">
+        <button class="btn-language active" id="btnGerman" data-lang="de">🇩🇪</button>
+        <button class="btn-language" id="btnEnglish" data-lang="en">🇬🇧</button>
+      </div>
+    </div>
+    
     <!-- Spotify Control Box -->
     <div class="control-panel spotify-panel">
       <div class="spotify-status" id="spotifyStatus">
-        <button class="btn-spotify-connect" id="spotifyConnectBtn">🎵 Spotify verbinden</button>
+        <button class="btn-spotify-connect" id="spotifyConnectBtn">🎵 Connect Spotify</button>
       </div>
       
       <div class="spotify-controls hidden" id="spotifyControls">
         <div class="volume-control">
-          <label>🔊 Lautstärke: <span id="volumeValue">50</span>%</label>
+          <label>🔊 Volume: <span id="volumeValue">50</span>%</label>
           <input type="range" id="volumeSlider" min="0" max="100" value="50" class="slider">
         </div>
         
@@ -288,8 +327,8 @@
       </div>
       
       <div class="input-group">
-        <label for="timeInput">Zeit in Minuten:</label>
-        <input type="number" id="timeInput" min="1" placeholder="z.B. 5" value="5">
+        <label for="timeInput">Time in minutes:</label>
+        <input type="number" id="timeInput" min="1" placeholder="e.g. 5" value="5">
       </div>
       
       <div class="button-group">
@@ -322,6 +361,25 @@
     const volumeValue = document.getElementById('volumeValue');
     const playPauseBtn = document.getElementById('playPauseBtn');
     const skipBtn = document.getElementById('skipBtn');
+    const btnGerman = document.getElementById('btnGerman');
+    const btnEnglish = document.getElementById('btnEnglish');
+    
+    let currentLanguage = 'de';
+    
+    // Language Switch
+    btnGerman.addEventListener('click', async () => {
+      currentLanguage = 'de';
+      btnGerman.classList.add('active');
+      btnEnglish.classList.remove('active');
+      await updateState({ language: 'de' });
+    });
+    
+    btnEnglish.addEventListener('click', async () => {
+      currentLanguage = 'en';
+      btnEnglish.classList.add('active');
+      btnGerman.classList.remove('active');
+      await updateState({ language: 'en' });
+    });
     
     // Spotify Connect
     spotifyConnectBtn.addEventListener('click', () => {
@@ -450,6 +508,7 @@
         }
         
         previewTime.textContent = formatTime(currentState.remaining);
+        // Keep showing end time even when paused
         if (currentState.endTime) {
           previewEnd.textContent = `Resume: ${formatEndTime(currentState.endTime)}`;
         }
@@ -458,7 +517,7 @@
         pauseBtn.classList.add('hidden');
         resetBtn.classList.add('hidden');
         previewTime.textContent = '00:00';
-        previewEnd.textContent = 'Resume: --:-- Uhr';
+        previewEnd.textContent = 'Resume: --:-- ';
       }
     }
     
