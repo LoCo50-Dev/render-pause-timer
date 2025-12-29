@@ -52,20 +52,49 @@ const VIDEO_INTERVAL = 10 * 60 * 1000;
 
 // ===== AUTHENTICATION =====
 
+// TEST: Secret prüfen (LÖSCHE DAS SPÄTER!)
+app.get('/api/test-secret', (req, res) => {
+  res.json({
+    secretExists: !!TOTP_SECRET,
+    secretLength: TOTP_SECRET ? TOTP_SECRET.length : 0,
+    firstChars: TOTP_SECRET ? TOTP_SECRET.substring(0, 5) : 'N/A'
+  });
+});
+
 // Verify TOTP Code
 app.post('/api/auth/verify', (req, res) => {
   const { code, sessionId } = req.body;
   
+  console.log('=== AUTH ATTEMPT ===');
+  console.log('Received code:', code);
+  console.log('Code type:', typeof code);
+  console.log('TOTP_SECRET exists:', !!TOTP_SECRET);
+  console.log('TOTP_SECRET length:', TOTP_SECRET ? TOTP_SECRET.length : 0);
+  
   if (!TOTP_SECRET) {
+    console.log('ERROR: TOTP_SECRET not set');
     return res.json({ success: false, error: 'Server not configured' });
   }
+  
+  // Generiere den erwarteten Code
+  const expectedToken = speakeasy.totp({
+    secret: TOTP_SECRET,
+    encoding: 'base32'
+  });
+  
+  console.log('Expected token:', expectedToken);
+  console.log('Codes match (strict):', code === expectedToken);
+  console.log('Codes match (string):', String(code) === String(expectedToken));
   
   const verified = speakeasy.totp.verify({
     secret: TOTP_SECRET,
     encoding: 'base32',
     token: code,
-    window: 2 // Allow 1 step before/after (60 seconds tolerance)
+    window: 6 // Mehr Toleranz: 3 Minuten
   });
+  
+  console.log('Verification result:', verified);
+  console.log('===================');
   
   if (verified) {
     activeSessions.add(sessionId);
@@ -366,5 +395,7 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   if (!TOTP_SECRET) {
     console.warn('⚠️  WARNING: TOTP_SECRET not set! Run setup-totp.js and add to Render environment.');
+  } else {
+    console.log('✅ TOTP_SECRET is set');
   }
 });
