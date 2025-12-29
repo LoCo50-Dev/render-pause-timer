@@ -1,16 +1,23 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const speakeasy = require('speakeasy');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.static('public'));
 
+// TOTP Configuration - NUTZT ENVIRONMENT VARIABLE!
+const TOTP_SECRET = process.env.TOTP_SECRET;
+
 // Spotify API Configuration - NUTZT ENVIRONMENT VARIABLES!
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 const REDIRECT_URI = 'https://lc5-streamdesk.onrender.com/callback';
+
+// Session Store (einfache In-Memory Lösung)
+const activeSessions = new Set();
 
 // In-Memory State
 let timerState = {
@@ -20,7 +27,8 @@ let timerState = {
   isPaused: false,
   isRunning: false,
   wasSkipped: false,
-  language: 'de'
+  language: 'de',
+  autoExtendTime: null // Zeitpunkt für Auto-Verlängerung
 };
 
 let spotifyState = {
@@ -42,6 +50,47 @@ let popupState = {
 // Video rotation interval (10 minutes)
 const VIDEO_INTERVAL = 10 * 60 * 1000;
 
+// ===== AUTHENTICATION =====
+
+// Verify TOTP Code
+app.post('/api/auth/verify', (req, res) => {
+  const { code, sessionId } = req.body;
+  
+  if (!TOTP_SECRET) {
+    return res.json({ success: false, error: 'Server not configured' });
+  }
+  
+  const verified = speakeasy.totp.verify({
+    secret: TOTP_SECRET,
+    encoding: 'base32',
+    token: code,
+    window: 2 // Allow 1 step before/after (60 seconds tolerance)
+  });
+  
+  if (verified) {
+    activeSessions.add(sessionId);
+    res.json({ success: true });
+  } else {
+    res.json({ success: false, error: 'Invalid code' });
+  }
+});
+
+// Check if session is valid
+app.post('/api/auth/check', (req, res) => {
+  const { sessionId } = req.body;
+  const isValid = activeSessions.has(sessionId);
+  res.json({ valid: isValid });
+});
+
+// Logout
+app.post('/api/auth/logout', (req, res) => {
+  const { sessionId } = req.body;
+  activeSessions.delete(sessionId);
+  res.json({ success: true });
+});
+
+// ===== TIMER STATE =====
+
 // GET State
 app.get('/api/state', (req, res) => {
   res.json(timerState);
@@ -62,10 +111,39 @@ app.post('/api/reset', (req, res) => {
     isPaused: false,
     isRunning: false,
     wasSkipped: false,
+    autoExtendTime: null,
     language: timerState.language || 'de'
   };
   res.json(timerState);
 });
+
+// ===== TIMER AUTO-EXTEND LOGIC =====
+
+// Check every second if timer needs auto-extension
+setInterval(() => {
+  if (!timerState.isRunning || timerState.isPaused) {
+    return;
+  }
+  
+  // Timer reached 0
+  if (timerState.remaining <= 0 && !timerState.autoExtendTime) {
+    // Start 30-second countdown for auto-extension
+    timerState.autoExtendTime = Date.now() + 30000;
+    console.log('Timer ended. Auto-extend in 30 seconds...');
+  }
+  
+  // Check if 30 seconds passed and auto-extend
+  if (timerState.autoExtendTime && Date.now() >= timerState.autoExtendTime) {
+    const extension = 5 * 60; // 5 minutes in seconds
+    timerState.duration += extension;
+    timerState.remaining = extension;
+    timerState.endTime = Date.now() + (extension * 1000);
+    timerState.autoExtendTime = null;
+    console.log('Timer auto-extended by 5 minutes');
+  }
+}, 1000);
+
+// ===== POP-UP =====
 
 // Pop-Up - Get available videos
 app.get('/api/popup/videos', (req, res) => {
@@ -142,6 +220,8 @@ setInterval(() => {
     startVideoRotation();
   }
 }, 60 * 1000);
+
+// ===== SPOTIFY =====
 
 // Spotify Auth - Step 1: Redirect to Spotify
 app.get('/spotify/login', (req, res) => {
@@ -284,4 +364,7 @@ app.get('/api/spotify/state', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  if (!TOTP_SECRET) {
+    console.warn('⚠️  WARNING: TOTP_SECRET not set! Run setup-totp.js and add to Render environment.');
+  }
 });
