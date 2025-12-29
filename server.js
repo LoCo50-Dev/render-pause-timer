@@ -8,97 +8,136 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static('public'));
 
-// TOTP Configuration - NUTZT ENVIRONMENT VARIABLE!
-const TOTP_SECRET = process.env.TOTP_SECRET;
+// ===== USER CONFIGURATION =====
+// Füge hier neue User hinzu. Jeder User braucht:
+// - id: Eindeutiger Code (wird für Ordner verwendet)
+// - name: Anzeigename
+// - ytId: Verschlüsselter Code für externe Systeme
+const USERS = [
+  {
+    id: 'SD-A98DB',
+    name: '@ExplorerLoCo50',
+    ytId: 'ABC123XYZ'
+  }
+  // Weitere User hier hinzufügen:
+  // {
+  //   id: 'USER002',
+  //   name: 'AnotherStreamer',
+  //   ytId: 'DEF456UVW'
+  // }
+];
 
-// Spotify API Configuration - NUTZT ENVIRONMENT VARIABLES!
+// TOTP Configuration - Setze "NONE" um Passwort zu deaktivieren
+const TOTP_SECRET = process.env.TOTP_SECRET;
+const AUTH_DISABLED = TOTP_SECRET === 'NONE';
+
+// Spotify API Configuration
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 const REDIRECT_URI = 'https://lc5-streamdesk.onrender.com/callback';
 
-// Session Store (einfache In-Memory Lösung)
-const activeSessions = new Set();
+// Session Store with user info
+const activeSessions = new Map(); // sessionId -> userId
 
-// In-Memory State
-let timerState = {
-  duration: 0,
-  remaining: 0,
-  endTime: null,
-  isPaused: false,
-  isRunning: false,
-  wasSkipped: false,
-  language: 'de',
-  autoExtendTime: null // Zeitpunkt für Auto-Verlängerung
-};
+// In-Memory State (per user)
+const userStates = new Map(); // userId -> state
 
-let spotifyState = {
-  accessToken: null,
-  refreshToken: null,
-  volume: 50,
-  isPlaying: false,
-  currentTrack: null
-};
-
-let popupState = {
-  isActive: false,
-  selectedVideos: [],
-  currentVideoIndex: 0,
-  currentVideo: null,
-  lastPlayedTime: null
-};
+function getUserState(userId) {
+  if (!userStates.has(userId)) {
+    userStates.set(userId, {
+      timer: {
+        duration: 0,
+        remaining: 0,
+        endTime: null,
+        isPaused: false,
+        isRunning: false,
+        wasSkipped: false,
+        language: 'de',
+        autoExtendTime: null
+      },
+      spotify: {
+        accessToken: null,
+        refreshToken: null,
+        volume: 50,
+        isPlaying: false,
+        currentTrack: null
+      },
+      popup: {
+        isActive: false,
+        selectedVideos: [],
+        currentVideoIndex: 0,
+        currentVideo: null,
+        lastPlayedTime: null
+      }
+    });
+  }
+  return userStates.get(userId);
+}
 
 // Video rotation interval (10 minutes)
 const VIDEO_INTERVAL = 10 * 60 * 1000;
 
 // ===== AUTHENTICATION =====
 
-// TEST: Secret prüfen (LÖSCHE DAS SPÄTER!)
-app.get('/api/test-secret', (req, res) => {
+// Get user list
+app.get('/api/users', (req, res) => {
   res.json({
-    secretExists: !!TOTP_SECRET,
-    secretLength: TOTP_SECRET ? TOTP_SECRET.length : 0,
-    firstChars: TOTP_SECRET ? TOTP_SECRET.substring(0, 5) : 'N/A'
+    users: USERS.map(u => ({ id: u.id, name: u.name })),
+    authDisabled: AUTH_DISABLED
+  });
+});
+
+// Get user info by ID
+app.get('/api/user/:userId', (req, res) => {
+  const user = USERS.find(u => u.id === req.params.userId);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  res.json({
+    id: user.id,
+    name: user.name,
+    ytId: user.ytId
   });
 });
 
 // Verify TOTP Code
 app.post('/api/auth/verify', (req, res) => {
-  const { code, sessionId } = req.body;
+  const { code, sessionId, userId } = req.body;
+  
+  // Check if user exists
+  const user = USERS.find(u => u.id === userId);
+  if (!user) {
+    return res.json({ success: false, error: 'Invalid user' });
+  }
+  
+  // If auth is disabled, auto-approve
+  if (AUTH_DISABLED) {
+    activeSessions.set(sessionId, userId);
+    return res.json({ success: true, user: { id: user.id, name: user.name, ytId: user.ytId } });
+  }
   
   console.log('=== AUTH ATTEMPT ===');
+  console.log('User:', userId);
   console.log('Received code:', code);
-  console.log('Code type:', typeof code);
-  console.log('TOTP_SECRET exists:', !!TOTP_SECRET);
-  console.log('TOTP_SECRET length:', TOTP_SECRET ? TOTP_SECRET.length : 0);
   
   if (!TOTP_SECRET) {
     console.log('ERROR: TOTP_SECRET not set');
     return res.json({ success: false, error: 'Server not configured' });
   }
   
-  // Generiere den erwarteten Code
-  const expectedToken = speakeasy.totp({
-    secret: TOTP_SECRET,
-    encoding: 'base32'
-  });
-  
-  console.log('Expected token:', expectedToken);
-  console.log('Codes match (strict):', code === expectedToken);
-  console.log('Codes match (string):', String(code) === String(expectedToken));
-  
   const verified = speakeasy.totp.verify({
     secret: TOTP_SECRET,
     encoding: 'base32',
     token: code,
-    window: 6 // Mehr Toleranz: 3 Minuten
+    window: 6
   });
   
   console.log('Verification result:', verified);
   console.log('===================');
   
   if (verified) {
-    activeSessions.add(sessionId);
-    res.json({ success: true });
+    activeSessions.set(sessionId, userId);
+    res.json({ success: true, user: { id: user.id, name: user.name, ytId: user.ytId } });
   } else {
     res.json({ success: false, error: 'Invalid code' });
   }
@@ -107,8 +146,19 @@ app.post('/api/auth/verify', (req, res) => {
 // Check if session is valid
 app.post('/api/auth/check', (req, res) => {
   const { sessionId } = req.body;
-  const isValid = activeSessions.has(sessionId);
-  res.json({ valid: isValid });
+  
+  // If auth is disabled, always return invalid to force re-login
+  if (AUTH_DISABLED) {
+    return res.json({ valid: false });
+  }
+  
+  const userId = activeSessions.get(sessionId);
+  const user = USERS.find(u => u.id === userId);
+  
+  res.json({
+    valid: !!user,
+    user: user ? { id: user.id, name: user.name, ytId: user.ytId } : null
+  });
 });
 
 // Logout
@@ -118,22 +168,41 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ success: true });
 });
 
+// Middleware to get userId from session
+function getUserFromSession(req, res, next) {
+  const sessionId = req.headers['x-session-id'];
+  if (!sessionId) {
+    return res.status(401).json({ error: 'No session' });
+  }
+  
+  const userId = activeSessions.get(sessionId);
+  if (!userId) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+  
+  req.userId = userId;
+  next();
+}
+
 // ===== TIMER STATE =====
 
 // GET State
-app.get('/api/state', (req, res) => {
-  res.json(timerState);
+app.get('/api/state', getUserFromSession, (req, res) => {
+  const state = getUserState(req.userId);
+  res.json(state.timer);
 });
 
 // POST Update State
-app.post('/api/state', (req, res) => {
-  timerState = { ...timerState, ...req.body };
-  res.json(timerState);
+app.post('/api/state', getUserFromSession, (req, res) => {
+  const state = getUserState(req.userId);
+  state.timer = { ...state.timer, ...req.body };
+  res.json(state.timer);
 });
 
 // Reset State
-app.post('/api/reset', (req, res) => {
-  timerState = {
+app.post('/api/reset', getUserFromSession, (req, res) => {
+  const state = getUserState(req.userId);
+  state.timer = {
     duration: 0,
     remaining: 0,
     endTime: null,
@@ -141,42 +210,43 @@ app.post('/api/reset', (req, res) => {
     isRunning: false,
     wasSkipped: false,
     autoExtendTime: null,
-    language: timerState.language || 'de'
+    language: state.timer.language || 'de'
   };
-  res.json(timerState);
+  res.json(state.timer);
 });
 
 // ===== TIMER AUTO-EXTEND LOGIC =====
 
-// Check every second if timer needs auto-extension
 setInterval(() => {
-  if (!timerState.isRunning || timerState.isPaused) {
-    return;
-  }
-  
-  // Timer reached 0
-  if (timerState.remaining <= 0 && !timerState.autoExtendTime) {
-    // Start 30-second countdown for auto-extension
-    timerState.autoExtendTime = Date.now() + 30000;
-    console.log('Timer ended. Auto-extend in 30 seconds...');
-  }
-  
-  // Check if 30 seconds passed and auto-extend
-  if (timerState.autoExtendTime && Date.now() >= timerState.autoExtendTime) {
-    const extension = 5 * 60; // 5 minutes in seconds
-    timerState.duration += extension;
-    timerState.remaining = extension;
-    timerState.endTime = Date.now() + (extension * 1000);
-    timerState.autoExtendTime = null;
-    console.log('Timer auto-extended by 5 minutes');
-  }
+  userStates.forEach((state, userId) => {
+    const timer = state.timer;
+    
+    if (!timer.isRunning || timer.isPaused) {
+      return;
+    }
+    
+    if (timer.remaining <= 0 && !timer.autoExtendTime) {
+      timer.autoExtendTime = Date.now() + 30000;
+      console.log(`[${userId}] Timer ended. Auto-extend in 30 seconds...`);
+    }
+    
+    if (timer.autoExtendTime && Date.now() >= timer.autoExtendTime) {
+      const extension = 5 * 60;
+      timer.duration += extension;
+      timer.remaining = extension;
+      timer.endTime = Date.now() + (extension * 1000);
+      timer.autoExtendTime = null;
+      console.log(`[${userId}] Timer auto-extended by 5 minutes`);
+    }
+  });
 }, 1000);
 
 // ===== POP-UP =====
 
-// Pop-Up - Get available videos
-app.get('/api/popup/videos', (req, res) => {
-  const popDir = path.join(__dirname, 'public', 'pop');
+// Pop-Up - Get available videos for user
+app.get('/api/popup/videos', getUserFromSession, (req, res) => {
+  const userId = req.userId;
+  const popDir = path.join(__dirname, 'public', 'pop', userId);
   
   try {
     if (!fs.existsSync(popDir)) {
@@ -194,77 +264,83 @@ app.get('/api/popup/videos', (req, res) => {
 });
 
 // Pop-Up - Get state
-app.get('/api/popup/state', (req, res) => {
-  res.json(popupState);
+app.get('/api/popup/state', getUserFromSession, (req, res) => {
+  const state = getUserState(req.userId);
+  res.json(state.popup);
 });
 
 // Pop-Up - Update state
-app.post('/api/popup/state', (req, res) => {
-  popupState = { ...popupState, ...req.body };
+app.post('/api/popup/state', getUserFromSession, (req, res) => {
+  const state = getUserState(req.userId);
+  state.popup = { ...state.popup, ...req.body };
   
-  // If activating, start rotation
-  if (popupState.isActive && popupState.selectedVideos.length > 0) {
-    startVideoRotation();
-  } else if (!popupState.isActive) {
-    popupState.currentVideo = null;
-    popupState.lastPlayedTime = null;
+  if (state.popup.isActive && state.popup.selectedVideos.length > 0) {
+    startVideoRotation(req.userId);
+  } else if (!state.popup.isActive) {
+    state.popup.currentVideo = null;
+    state.popup.lastPlayedTime = null;
   }
   
-  res.json(popupState);
+  res.json(state.popup);
 });
 
-// Pop-Up - Get current video
-app.get('/api/popup/current', (req, res) => {
+// Pop-Up - Get current video (public endpoint for popup.html)
+app.get('/api/popup/current/:userId', (req, res) => {
+  const state = getUserState(req.params.userId);
   res.json({ 
-    currentVideo: popupState.currentVideo,
-    isActive: popupState.isActive
+    currentVideo: state.popup.currentVideo,
+    isActive: state.popup.isActive,
+    userId: req.params.userId
   });
 });
 
 // Video rotation logic
-function startVideoRotation() {
-  if (!popupState.isActive || popupState.selectedVideos.length === 0) {
+function startVideoRotation(userId) {
+  const state = getUserState(userId);
+  const popup = state.popup;
+  
+  if (!popup.isActive || popup.selectedVideos.length === 0) {
     return;
   }
   
   const now = Date.now();
   
-  // Check if 10 minutes have passed since last video
-  if (!popupState.lastPlayedTime || (now - popupState.lastPlayedTime >= VIDEO_INTERVAL)) {
-    // Play next video
-    const video = popupState.selectedVideos[popupState.currentVideoIndex];
-    popupState.currentVideo = video;
-    popupState.lastPlayedTime = now;
+  if (!popup.lastPlayedTime || (now - popup.lastPlayedTime >= VIDEO_INTERVAL)) {
+    const video = popup.selectedVideos[popup.currentVideoIndex];
+    popup.currentVideo = video;
+    popup.lastPlayedTime = now;
     
-    // Move to next video (loop back to 0 after last)
-    popupState.currentVideoIndex = (popupState.currentVideoIndex + 1) % popupState.selectedVideos.length;
+    popup.currentVideoIndex = (popup.currentVideoIndex + 1) % popup.selectedVideos.length;
     
-    console.log(`Playing video: ${video} at ${new Date().toLocaleTimeString()}`);
+    console.log(`[${userId}] Playing video: ${video} at ${new Date().toLocaleTimeString()}`);
   }
 }
 
 // Check video rotation every minute
 setInterval(() => {
-  if (popupState.isActive && popupState.selectedVideos.length > 0) {
-    startVideoRotation();
-  }
+  userStates.forEach((state, userId) => {
+    if (state.popup.isActive && state.popup.selectedVideos.length > 0) {
+      startVideoRotation(userId);
+    }
+  });
 }, 60 * 1000);
 
 // ===== SPOTIFY =====
 
 // Spotify Auth - Step 1: Redirect to Spotify
-app.get('/spotify/login', (req, res) => {
+app.get('/spotify/login', getUserFromSession, (req, res) => {
   const scopes = 'user-read-playback-state user-modify-playback-state user-read-currently-playing';
-  const authUrl = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}`;
+  const authUrl = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}&state=${req.userId}`;
   res.redirect(authUrl);
 });
 
 // Spotify Auth - Step 2: Callback
 app.get('/callback', async (req, res) => {
   const code = req.query.code;
+  const userId = req.query.state;
   
-  if (!code) {
-    return res.send('Error: No code provided');
+  if (!code || !userId) {
+    return res.send('Error: No code or user provided');
   }
 
   try {
@@ -282,8 +358,9 @@ app.get('/callback', async (req, res) => {
     });
 
     const data = await response.json();
-    spotifyState.accessToken = data.access_token;
-    spotifyState.refreshToken = data.refresh_token;
+    const state = getUserState(userId);
+    state.spotify.accessToken = data.access_token;
+    state.spotify.refreshToken = data.refresh_token;
 
     res.send('<h1>✅ Spotify verbunden!</h1><p>Du kannst dieses Fenster schließen.</p><script>window.close()</script>');
   } catch (err) {
@@ -292,14 +369,16 @@ app.get('/callback', async (req, res) => {
 });
 
 // Spotify - Get Current Track
-app.get('/api/spotify/current', async (req, res) => {
-  if (!spotifyState.accessToken) {
+app.get('/api/spotify/current', getUserFromSession, async (req, res) => {
+  const state = getUserState(req.userId);
+  
+  if (!state.spotify.accessToken) {
     return res.json({ error: 'Not authenticated' });
   }
 
   try {
     const response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
-      headers: { 'Authorization': 'Bearer ' + spotifyState.accessToken }
+      headers: { 'Authorization': 'Bearer ' + state.spotify.accessToken }
     });
 
     if (response.status === 204) {
@@ -307,7 +386,7 @@ app.get('/api/spotify/current', async (req, res) => {
     }
 
     const data = await response.json();
-    spotifyState.currentTrack = {
+    state.spotify.currentTrack = {
       name: data.item?.name,
       artist: data.item?.artists[0]?.name,
       album: data.item?.album?.name,
@@ -315,44 +394,48 @@ app.get('/api/spotify/current', async (req, res) => {
       duration: data.item?.duration_ms,
       progress: data.progress_ms
     };
-    spotifyState.isPlaying = data.is_playing;
+    state.spotify.isPlaying = data.is_playing;
 
-    res.json(spotifyState.currentTrack);
+    res.json(state.spotify.currentTrack);
   } catch (err) {
     res.json({ error: err.message });
   }
 });
 
 // Spotify - Play/Pause
-app.post('/api/spotify/playpause', async (req, res) => {
-  if (!spotifyState.accessToken) {
+app.post('/api/spotify/playpause', getUserFromSession, async (req, res) => {
+  const state = getUserState(req.userId);
+  
+  if (!state.spotify.accessToken) {
     return res.json({ error: 'Not authenticated' });
   }
 
   try {
-    const endpoint = spotifyState.isPlaying ? 'pause' : 'play';
+    const endpoint = state.spotify.isPlaying ? 'pause' : 'play';
     await fetch(`https://api.spotify.com/v1/me/player/${endpoint}`, {
       method: 'PUT',
-      headers: { 'Authorization': 'Bearer ' + spotifyState.accessToken }
+      headers: { 'Authorization': 'Bearer ' + state.spotify.accessToken }
     });
 
-    spotifyState.isPlaying = !spotifyState.isPlaying;
-    res.json({ success: true, isPlaying: spotifyState.isPlaying });
+    state.spotify.isPlaying = !state.spotify.isPlaying;
+    res.json({ success: true, isPlaying: state.spotify.isPlaying });
   } catch (err) {
     res.json({ error: err.message });
   }
 });
 
 // Spotify - Skip
-app.post('/api/spotify/skip', async (req, res) => {
-  if (!spotifyState.accessToken) {
+app.post('/api/spotify/skip', getUserFromSession, async (req, res) => {
+  const state = getUserState(req.userId);
+  
+  if (!state.spotify.accessToken) {
     return res.json({ error: 'Not authenticated' });
   }
 
   try {
     await fetch('https://api.spotify.com/v1/me/player/next', {
       method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + spotifyState.accessToken }
+      headers: { 'Authorization': 'Bearer ' + state.spotify.accessToken }
     });
 
     res.json({ success: true });
@@ -362,18 +445,20 @@ app.post('/api/spotify/skip', async (req, res) => {
 });
 
 // Spotify - Set Volume
-app.post('/api/spotify/volume', async (req, res) => {
-  if (!spotifyState.accessToken) {
+app.post('/api/spotify/volume', getUserFromSession, async (req, res) => {
+  const state = getUserState(req.userId);
+  
+  if (!state.spotify.accessToken) {
     return res.json({ error: 'Not authenticated' });
   }
 
   const volume = req.body.volume;
-  spotifyState.volume = volume;
+  state.spotify.volume = volume;
 
   try {
     await fetch(`https://api.spotify.com/v1/me/player/volume?volume_percent=${volume}`, {
       method: 'PUT',
-      headers: { 'Authorization': 'Bearer ' + spotifyState.accessToken }
+      headers: { 'Authorization': 'Bearer ' + state.spotify.accessToken }
     });
 
     res.json({ success: true, volume: volume });
@@ -383,19 +468,17 @@ app.post('/api/spotify/volume', async (req, res) => {
 });
 
 // Get Spotify State
-app.get('/api/spotify/state', (req, res) => {
+app.get('/api/spotify/state', getUserFromSession, (req, res) => {
+  const state = getUserState(req.userId);
   res.json({
-    connected: !!spotifyState.accessToken,
-    volume: spotifyState.volume,
-    isPlaying: spotifyState.isPlaying
+    connected: !!state.spotify.accessToken,
+    volume: state.spotify.volume,
+    isPlaying: state.spotify.isPlaying
   });
 });
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  if (!TOTP_SECRET) {
-    console.warn('⚠️  WARNING: TOTP_SECRET not set! Run setup-totp.js and add to Render environment.');
-  } else {
-    console.log('✅ TOTP_SECRET is set');
-  }
+  console.log(`Auth mode: ${AUTH_DISABLED ? 'DISABLED' : 'ENABLED'}`);
+  console.log(`Registered users: ${USERS.map(u => u.name).join(', ')}`);
 });
