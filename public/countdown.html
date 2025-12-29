@@ -117,14 +117,21 @@
         const endTime = document.getElementById('endTime');
         
         if (!state.isRunning || state.remaining <= 0) {
-          countdown.textContent = t.starting;
-          progressBar.style.width = '0%';
-          endTime.textContent = state.wasSkipped ? t.skipped : '';
+          if (state.wasSkipped) {
+            countdown.textContent = t.starting;
+            progressBar.style.width = '0%';
+            endTime.textContent = t.skipped;
+          } else {
+            countdown.textContent = t.starting;
+            progressBar.style.width = '0%';
+            endTime.textContent = '';
+          }
         } else {
+          // Use state.remaining directly from server (already calculated)
           countdown.textContent = formatTime(state.remaining);
           
           const progress = ((state.duration - state.remaining) / state.duration) * 100;
-          progressBar.style.width = `${progress}%`;
+          progressBar.style.width = `${Math.max(0, Math.min(100, progress))}%`;
           
           if (state.endTime) {
             endTime.textContent = `${t.endsAt} ${formatEndTime(state.endTime)}`;
