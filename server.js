@@ -213,13 +213,15 @@ app.post('/api/state', getUserFromSession, (req, res) => {
 });
 
 app.post('/api/reset', getUserFromSession, (req, res) => {
+  const wasRunning = userState.timer.isRunning && userState.timer.remaining > 0;
+  
   userState.timer = {
     duration: 0,
     remaining: 0,
     endTime: null,
     isPaused: false,
     isRunning: false,
-    wasSkipped: false,
+    wasSkipped: wasRunning,
     autoExtendTime: null,
     lastUpdateTime: null,
     language: userState.timer.language || 'de'
