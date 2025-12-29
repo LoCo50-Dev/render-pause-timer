@@ -12,27 +12,38 @@ app.use(express.static('public'));
 const USERS = [
   {
     id: 'SD-A98DB',
-    name: '@ExplorerLoCo50',
-    totpSecret: process.env.TOTP_SECRET_USER1 || null
+    name: '@ExplorerLoCo50'
   },
   {
     id: 'SD-X69MM',          
-    name: '@mevm_yt',
-    totpSecret: process.env.TOTP_SECRET_USER2 || null
+    name: '@mevm_yt'
   },
   {
     id: 'SD-H6RSG',          
-    name: '@R34dySethG0',
-    totpSecret: process.env.TOTP_SECRET_USER3 || null
+    name: '@R34dySethG0'
   },
   {
     id: 'none',
-    name: 'Guest',
-    totpSecret: null
+    name: 'Guest'
   }
 ];
 
 const YT_ID = process.env.YT_ID || 'SD-A98DB';
+
+// Get TOTP secret from environment based on YT_ID
+function getTotpSecretForCurrentUser() {
+  const ytId = process.env.YT_ID;
+  
+  // Read the TOTP_SECRET environment variable for THIS instance
+  const totpSecret = process.env.TOTP_SECRET;
+  
+  // If TOTP_SECRET is 'NONE' or not set, auth is disabled
+  if (!totpSecret || totpSecret === 'NONE') {
+    return null;
+  }
+  
+  return totpSecret;
+}
 
 function getCurrentUser() {
   const user = USERS.find(u => u.id === YT_ID);
@@ -89,15 +100,16 @@ const VIDEO_INTERVAL = 10 * 60 * 1000;
 app.post('/api/auth/verify', (req, res) => {
   const { code, sessionId } = req.body;
   const currentUser = getCurrentUser();
+  const totpSecret = getTotpSecretForCurrentUser();
   
   console.log('=== AUTH ATTEMPT ===');
   console.log('Received code:', code);
   console.log('Current user:', currentUser.name, '(', currentUser.id, ')');
-  console.log('TOTP Secret:', currentUser.totpSecret ? 'SET' : 'NOT SET');
+  console.log('TOTP Secret:', totpSecret ? 'SET' : 'NOT SET (AUTH DISABLED)');
   
-  // Check if auth is disabled for this specific user
-  if (!currentUser.totpSecret || currentUser.totpSecret === 'NONE') {
-    console.log('Auth disabled for this user - auto-login');
+  // Check if auth is disabled (TOTP_SECRET is NONE or not set)
+  if (!totpSecret) {
+    console.log('Auth disabled for this instance - auto-login');
     activeSessions.set(sessionId, currentUser.id);
     return res.json({ 
       success: true, 
@@ -107,7 +119,7 @@ app.post('/api/auth/verify', (req, res) => {
   
   // Verify TOTP code
   const verified = speakeasy.totp.verify({
-    secret: currentUser.totpSecret,
+    secret: totpSecret,
     encoding: 'base32',
     token: code,
     window: 6
@@ -460,12 +472,14 @@ app.get('/api/spotify/state', getUserFromSession, (req, res) => {
 
 app.listen(PORT, () => {
   const currentUser = getCurrentUser();
+  const totpSecret = getTotpSecretForCurrentUser();
+  
   console.log(`Server running on port ${PORT}`);
   console.log(`YT_ID from env: ${YT_ID}`);
   console.log(`Current user: ${currentUser.name} (${currentUser.id})`);
-  console.log(`Auth for ${currentUser.name}: ${currentUser.totpSecret ? 'ENABLED' : 'DISABLED (NONE)'}`);
-  console.log(`\nAll users:`);
+  console.log(`Auth: ${totpSecret ? 'ENABLED (TOTP Secret set)' : 'DISABLED (TOTP_SECRET=NONE or not set)'}`);
+  console.log(`\nAll available users:`);
   USERS.forEach(u => {
-    console.log(`  - ${u.name} (${u.id}) - Auth: ${u.totpSecret ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`  - ${u.name} (${u.id})`);
   });
 });
