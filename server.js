@@ -238,7 +238,12 @@ setInterval(() => {
   }
   
   // Update remaining time based on endTime
-  timer.remaining = calculateRemainingTime();
+  const newRemaining = calculateRemainingTime();
+  
+  // Only update if changed significantly (avoid micro-updates)
+  if (Math.abs(timer.remaining - newRemaining) >= 1) {
+    timer.remaining = newRemaining;
+  }
   
   // Auto-extend after timer reaches 0
   if (timer.remaining <= 0 && !timer.autoExtendTime) {
