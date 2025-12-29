@@ -1018,7 +1018,7 @@
           headers: getHeaders(),
           body: JSON.stringify(data)
         });
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 100));
         await loadState();
       } catch (err) {
         console.error('Update state error:', err);
@@ -1032,6 +1032,7 @@
       isUpdating = true;
       const minutes = parseInt(document.getElementById('timeInput').value) || 5;
       const seconds = minutes * 60;
+      const now = Date.now();
       
       try {
         await fetch(`${API_URL}/api/state`, {
@@ -1040,13 +1041,13 @@
           body: JSON.stringify({
             duration: seconds,
             remaining: seconds,
-            endTime: Date.now() + (seconds * 1000),
+            endTime: now + (seconds * 1000),
             isPaused: false,
             isRunning: true,
             wasSkipped: false
           })
         });
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 100));
         await loadState();
       } catch (err) {
         console.error('Start timer error:', err);
@@ -1072,7 +1073,7 @@
             isPaused: !currentState.isPaused
           })
         });
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 100));
         await loadState();
       } catch (err) {
         console.error('Pause timer error:', err);
@@ -1090,7 +1091,7 @@
           method: 'POST',
           headers: getHeaders()
         });
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 100));
         await loadState();
       } catch (err) {
         console.error('Reset timer error:', err);
@@ -1202,7 +1203,7 @@
             selectedVideos: selectedVideos
           })
         });
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 100));
       } catch (err) {
         console.error('Toggle popup error:', err);
       } finally {
@@ -1222,7 +1223,7 @@
             selectedVideos: selectedVideos
           })
         });
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 100));
       } catch (err) {
         console.error('Update popup videos error:', err);
       } finally {
