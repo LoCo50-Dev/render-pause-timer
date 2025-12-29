@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>StreamDesk Control</title>
   
-  <!-- App Icons for Mobile -->
   <link rel="icon" type="image/x-icon" href="/assets/icon.ico">
   <link rel="apple-touch-icon" href="/assets/icon.ico">
   <meta name="mobile-web-app-capable" content="yes">
@@ -31,6 +30,75 @@
       min-height: 100vh;
     }
     
+    /* LOGIN SCREEN */
+    .login-screen {
+      background: #2a2a2a;
+      border-radius: 15px;
+      padding: 30px;
+      max-width: 320px;
+      width: 100%;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      text-align: center;
+    }
+    
+    .login-screen h2 {
+      margin-bottom: 20px;
+      font-size: 24px;
+    }
+    
+    .login-screen p {
+      margin-bottom: 20px;
+      opacity: 0.7;
+      font-size: 14px;
+    }
+    
+    .code-input {
+      width: 100%;
+      padding: 15px;
+      font-size: 24px;
+      letter-spacing: 8px;
+      text-align: center;
+      background: #1a1a1a;
+      border: 2px solid #3a3a3a;
+      border-radius: 8px;
+      color: white;
+      margin-bottom: 15px;
+    }
+    
+    .code-input:focus {
+      outline: none;
+      border-color: #4CAF50;
+    }
+    
+    .btn-login {
+      width: 100%;
+      padding: 15px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    
+    .btn-login:hover {
+      background: #45a049;
+    }
+    
+    .error-message {
+      color: #f44336;
+      margin-top: 10px;
+      font-size: 14px;
+      display: none;
+    }
+    
+    .error-message.show {
+      display: block;
+    }
+    
+    /* MAIN CONTAINER */
     .container {
       display: flex;
       flex-direction: column;
@@ -39,39 +107,57 @@
       max-width: 320px;
     }
     
+    .hidden {
+      display: none !important;
+    }
+    
     .control-panel {
       background: #2a2a2a;
       border-radius: 15px;
       padding: 18px;
       width: 100%;
       box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-      transition: padding 0.3s ease;
+      transition: padding 0.3s ease, border-color 0.5s ease;
     }
     
     .control-panel.collapsed {
       padding: 8px 12px;
     }
     
+    /* SPOTIFY PANEL - Dunkel-Grün → Hell-Grün beim Spielen */
     .spotify-panel {
-      border: 2px solid #1DB954;
+      border: 2px solid #0d5c1f;
+      transition: border-color 0.5s ease;
     }
     
+    .spotify-panel.playing {
+      border-color: #1DB954;
+    }
+    
+    /* TIMER PANEL - Dunkel-Blau → Cyan beim Laufen */
     .timer-panel {
-      border: 2px solid #4CAF50;
+      border: 2px solid #1a3a52;
+      transition: border-color 0.5s ease;
     }
     
+    .timer-panel.running {
+      border-color: #00BCD4;
+    }
+    
+    /* LANGUAGE PANEL */
     .language-panel {
       border: 2px solid #FF9800;
       padding: 11px;
     }
     
+    /* POP-UP PANEL - Dunkel-Lila → Magenta beim Aktivieren */
     .popup-panel {
-      border: 2px solid #9C27B0;
-      transition: border-color 0.3s ease;
+      border: 2px solid #4a1a5c;
+      transition: border-color 0.5s ease;
     }
     
     .popup-panel.active {
-      border-color: #4CAF50;
+      border-color: #E91E63;
     }
     
     .language-buttons {
@@ -368,14 +454,10 @@
       background: #da190b;
     }
     
-    .hidden {
-      display: none;
-    }
-    
     /* Toggle Switch Styles */
     .toggle-container {
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
       align-items: center;
       margin-bottom: 11px;
     }
@@ -407,11 +489,6 @@
     
     .toggle-switch.active .toggle-circle {
       left: 28px;
-    }
-    
-    .toggle-label {
-      font-size: 12px;
-      font-weight: bold;
     }
     
     /* Video List Styles */
@@ -466,7 +543,17 @@
   </style>
 </head>
 <body>
-  <div class="container">
+  <!-- LOGIN SCREEN -->
+  <div class="login-screen" id="loginScreen">
+    <h2>🔐 StreamDesk</h2>
+    <p>Enter your 6-digit code from Google Authenticator</p>
+    <input type="text" class="code-input" id="codeInput" maxlength="6" placeholder="000000" autofocus>
+    <button class="btn-login" id="btnLogin">Login</button>
+    <div class="error-message" id="errorMessage">Invalid code. Please try again.</div>
+  </div>
+
+  <!-- MAIN CONTAINER -->
+  <div class="container hidden" id="mainContainer">
     <!-- Language Control Box -->
     <div class="control-panel language-panel">
       <div class="language-buttons">
@@ -480,7 +567,7 @@
     </div>
     
     <!-- Spotify Control Box -->
-    <div class="control-panel spotify-panel collapsed">
+    <div class="control-panel spotify-panel collapsed" id="spotifyPanel">
       <div class="panel-header collapsed" id="spotifyHeader">
         <span class="panel-arrow collapsed">˅</span>
         <span class="panel-title">Music</span>
@@ -505,7 +592,7 @@
     </div>
     
     <!-- Timer Control Box -->
-    <div class="control-panel timer-panel collapsed">
+    <div class="control-panel timer-panel collapsed" id="timerPanel">
       <div class="panel-header collapsed" id="timerHeader">
         <span class="panel-arrow collapsed">˅</span>
         <span class="panel-title">Break Timer</span>
@@ -537,7 +624,6 @@
       </div>
       <div class="panel-content collapsed" id="popupContent">
         <div class="toggle-container">
-          <span class="toggle-label">Power</span>
           <div class="toggle-switch" id="popupToggle">
             <div class="toggle-circle"></div>
           </div>
@@ -555,6 +641,14 @@
     let timerInterval = null;
     let currentState = null;
     let spotifyConnected = false;
+    let sessionId = null;
+    
+    // Elements
+    const loginScreen = document.getElementById('loginScreen');
+    const mainContainer = document.getElementById('mainContainer');
+    const codeInput = document.getElementById('codeInput');
+    const btnLogin = document.getElementById('btnLogin');
+    const errorMessage = document.getElementById('errorMessage');
     
     const startBtn = document.getElementById('startBtn');
     const pauseBtn = document.getElementById('pauseBtn');
@@ -563,7 +657,7 @@
     const previewTime = document.getElementById('previewTime');
     const previewEnd = document.getElementById('previewEnd');
     
-    // Spotify Elements
+    const spotifyPanel = document.getElementById('spotifyPanel');
     const spotifyConnectBtn = document.getElementById('spotifyConnectBtn');
     const spotifyControls = document.getElementById('spotifyControls');
     const spotifyStatus = document.getElementById('spotifyStatus');
@@ -576,10 +670,10 @@
     
     const spotifyHeader = document.getElementById('spotifyHeader');
     const spotifyContent = document.getElementById('spotifyContent');
+    const timerPanel = document.getElementById('timerPanel');
     const timerHeader = document.getElementById('timerHeader');
     const timerContent = document.getElementById('timerContent');
     
-    // Pop-Up Elements
     const popupHeader = document.getElementById('popupHeader');
     const popupContent = document.getElementById('popupContent');
     const popupToggle = document.getElementById('popupToggle');
@@ -589,10 +683,113 @@
     let availableVideos = [];
     let selectedVideos = [];
     let popupActive = false;
-    
     let currentLanguage = 'de';
     
-    // Collapse/Expand functionality
+    // ===== AUTHENTICATION =====
+    
+    // Generate random session ID
+    function generateSessionId() {
+      return 'session_' + Math.random().toString(36).substring(2, 15);
+    }
+    
+    // Check if session exists and is valid
+    async function checkSession() {
+      sessionId = localStorage.getItem('streamdesk_session');
+      
+      if (!sessionId) {
+        return false;
+      }
+      
+      try {
+        const res = await fetch(`${API_URL}/api/auth/check`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId })
+        });
+        const data = await res.json();
+        return data.valid;
+      } catch (err) {
+        return false;
+      }
+    }
+    
+    // Login with TOTP code
+    async function login() {
+      const code = codeInput.value.trim();
+      
+      if (code.length !== 6 || !/^\d+$/.test(code)) {
+        errorMessage.classList.add('show');
+        return;
+      }
+      
+      sessionId = generateSessionId();
+      
+      try {
+        const res = await fetch(`${API_URL}/api/auth/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, sessionId })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          localStorage.setItem('streamdesk_session', sessionId);
+          showMainContainer();
+        } else {
+          errorMessage.classList.add('show');
+          codeInput.value = '';
+          codeInput.focus();
+        }
+      } catch (err) {
+        console.error('Login error:', err);
+        errorMessage.textContent = 'Connection error. Please try again.';
+        errorMessage.classList.add('show');
+      }
+    }
+    
+    function showMainContainer() {
+      loginScreen.classList.add('hidden');
+      mainContainer.classList.remove('hidden');
+      initializeApp();
+    }
+    
+    // Login button
+    btnLogin.addEventListener('click', login);
+    
+    // Enter key in code input
+    codeInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        login();
+      }
+    });
+    
+    // Hide error on input
+    codeInput.addEventListener('input', () => {
+      errorMessage.classList.remove('show');
+    });
+    
+    // Check session on page load
+    (async () => {
+      const isValid = await checkSession();
+      if (isValid) {
+        showMainContainer();
+      }
+    })();
+    
+    // ===== MAIN APP INITIALIZATION =====
+    
+    function initializeApp() {
+      checkSpotifyConnection();
+      loadVideos();
+      loadPopupState();
+      loadState();
+      setInterval(loadState, 500);
+      setInterval(loadPopupState, 3000);
+      setInterval(updateSpotifyStatus, 2000);
+    }
+    
+    // ===== PANEL COLLAPSE/EXPAND =====
+    
     function togglePanel(header, content) {
       const arrow = header.querySelector('.panel-arrow');
       const title = header.querySelector('.panel-title');
@@ -600,14 +797,12 @@
       const isCollapsed = content.classList.contains('collapsed');
       
       if (isCollapsed) {
-        // Expand
         content.classList.remove('collapsed');
         arrow.classList.remove('collapsed');
         header.classList.remove('collapsed');
         panel.classList.remove('collapsed');
         title.classList.add('hidden');
       } else {
-        // Collapse
         content.classList.add('collapsed');
         arrow.classList.add('collapsed');
         header.classList.add('collapsed');
@@ -628,7 +823,8 @@
       togglePanel(popupHeader, popupContent);
     });
     
-    // Language Switch
+    // ===== LANGUAGE SWITCH =====
+    
     btnGerman.addEventListener('click', async () => {
       currentLanguage = 'de';
       btnGerman.classList.add('active');
@@ -643,7 +839,8 @@
       await updateState({ language: 'en' });
     });
     
-    // Spotify Connect
+    // ===== SPOTIFY =====
+    
     spotifyConnectBtn.addEventListener('click', () => {
       window.open(`${API_URL}/spotify/login`, '_blank', 'width=500,height=700');
       setTimeout(checkSpotifyConnection, 2000);
@@ -666,7 +863,23 @@
       }
     }
     
-    // Volume Slider - INDEPENDENT FROM TIMER
+    async function updateSpotifyStatus() {
+      if (!spotifyConnected) return;
+      
+      try {
+        const res = await fetch(`${API_URL}/api/spotify/state`);
+        const data = await res.json();
+        
+        if (data.isPlaying) {
+          spotifyPanel.classList.add('playing');
+        } else {
+          spotifyPanel.classList.remove('playing');
+        }
+      } catch (err) {
+        console.error('Spotify status error:', err);
+      }
+    }
+    
     volumeSlider.addEventListener('input', async (e) => {
       const volume = parseInt(e.target.value);
       volumeValue.textContent = volume;
@@ -682,7 +895,6 @@
       }
     });
     
-    // Play/Pause Button
     playPauseBtn.addEventListener('click', async () => {
       try {
         const res = await fetch(`${API_URL}/api/spotify/playpause`, {
@@ -704,7 +916,6 @@
       }
     });
     
-    // Skip Button
     skipBtn.addEventListener('click', async () => {
       try {
         await fetch(`${API_URL}/api/spotify/skip`, {
@@ -715,7 +926,8 @@
       }
     });
     
-    // Timer Functions
+    // ===== TIMER =====
+    
     function formatTime(seconds) {
       const mins = Math.floor(seconds / 60);
       const secs = seconds % 60;
@@ -748,7 +960,6 @@
         const res = await fetch(`${API_URL}/api/state`);
         currentState = await res.json();
         
-        // Sync language buttons with server state
         if (currentState.language) {
           currentLanguage = currentState.language;
           if (currentLanguage === 'de') {
@@ -768,6 +979,13 @@
     
     function updateUI() {
       if (!currentState) return;
+      
+      // Update timer border color based on running state
+      if (currentState.isRunning && !currentState.isPaused) {
+        timerPanel.classList.add('running');
+      } else {
+        timerPanel.classList.remove('running');
+      }
       
       if (currentState.isRunning) {
         startBtn.classList.add('hidden');
@@ -814,7 +1032,6 @@
       }, 1000);
     }
     
-    // TIMER START - NO SPOTIFY VOLUME CONTROL
     startBtn.addEventListener('click', async () => {
       const minutes = parseInt(timeInput.value) || 5;
       const duration = minutes * 60;
@@ -842,7 +1059,6 @@
       }
     });
     
-    // TIMER RESET - NO SPOTIFY VOLUME CONTROL
     resetBtn.addEventListener('click', async () => {
       if (timerInterval) clearInterval(timerInterval);
       
@@ -857,14 +1073,8 @@
       });
     });
     
-    // Check Spotify on load
-    checkSpotifyConnection();
-    setInterval(loadState, 500);
-    loadState();
+    // ===== POP-UP =====
     
-    // ===== POP-UP FUNCTIONS =====
-    
-    // Load available videos
     async function loadVideos() {
       try {
         const res = await fetch(`${API_URL}/api/popup/videos`);
@@ -876,7 +1086,6 @@
       }
     }
     
-    // Render video list with checkboxes
     function renderVideoList() {
       if (availableVideos.length === 0) {
         videoList.innerHTML = '<div class="no-videos">No videos found in /pop folder</div>';
@@ -917,7 +1126,6 @@
       });
     }
     
-    // Toggle switch
     popupToggle.addEventListener('click', async () => {
       popupActive = !popupActive;
       
@@ -932,7 +1140,6 @@
       await savePopupState();
     });
     
-    // Save popup state to server
     async function savePopupState() {
       try {
         await fetch(`${API_URL}/api/popup/state`, {
@@ -948,7 +1155,6 @@
       }
     }
     
-    // Load popup state from server
     async function loadPopupState() {
       try {
         const res = await fetch(`${API_URL}/api/popup/state`);
@@ -970,11 +1176,6 @@
         console.error('Error loading popup state:', err);
       }
     }
-    
-    // Initialize popup module
-    loadVideos();
-    loadPopupState();
-    setInterval(loadPopupState, 3000); // Sync state every 3 seconds
   </script>
 </body>
 </html>
