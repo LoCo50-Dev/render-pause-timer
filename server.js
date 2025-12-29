@@ -103,9 +103,16 @@ app.post('/api/auth/verify', (req, res) => {
   const totpSecret = getTotpSecretForCurrentUser();
   
   console.log('=== AUTH ATTEMPT ===');
+  console.log('Instance YT_ID:', YT_ID);
   console.log('Received code:', code);
   console.log('Current user:', currentUser.name, '(', currentUser.id, ')');
-  console.log('TOTP Secret:', totpSecret ? 'SET' : 'NOT SET (AUTH DISABLED)');
+  console.log('TOTP Secret from env:', totpSecret ? 'SET' : 'NOT SET (AUTH DISABLED)');
+  
+  // CRITICAL: Check if the user trying to login matches this instance's YT_ID
+  if (currentUser.id !== YT_ID) {
+    console.log('ERROR: User mismatch! This instance is for', YT_ID, 'not', currentUser.id);
+    return res.json({ success: false, error: 'Wrong instance' });
+  }
   
   // Check if auth is disabled (TOTP_SECRET is NONE or not set)
   if (!totpSecret) {
