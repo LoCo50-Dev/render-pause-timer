@@ -106,7 +106,9 @@
     
     async function updateDisplay() {
       try {
-        const res = await fetch(`${API_URL}/api/state`);
+        const res = await fetch(`${API_URL}/api/state`, {
+          headers: { 'X-Session-Id': 'public-display' }
+        });
         const state = await res.json();
         
         currentLanguage = state.language || 'de';
