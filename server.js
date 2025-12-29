@@ -16,6 +16,14 @@ const USERS = [
     id: 'SD-A98DB',           // User ID für Ordner (z.B. /pop/SD-A98DB/)
     name: '@ExplorerLoCo50'   // Anzeigename im UI
   },
+    {
+    id: 'SD-X69MM',          
+    name: '@mevm_yt'  
+  },
+    {
+    id: 'SD-H6RSG',          
+    name: '@R34dySethG0'   
+  },
   {
     id: 'none',               // Fallback User wenn keine YT_ID gesetzt
     name: 'Guest'
