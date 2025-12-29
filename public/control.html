@@ -798,7 +798,7 @@
       loadVideos();
       loadPopupState();
       loadState();
-      stateInterval = setInterval(loadState, 1000); // Changed from 500ms to 1000ms
+      stateInterval = setInterval(loadState, 500);
       popupInterval = setInterval(loadPopupState, 3000);
       spotifyInterval = setInterval(updateSpotifyStatus, 2000);
     }
