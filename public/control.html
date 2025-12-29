@@ -65,6 +65,15 @@
       padding: 11px;
     }
     
+    .popup-panel {
+      border: 2px solid #9C27B0;
+      transition: border-color 0.3s ease;
+    }
+    
+    .popup-panel.active {
+      border-color: #4CAF50;
+    }
+    
     .language-buttons {
       display: flex;
       gap: 10px;
@@ -362,6 +371,98 @@
     .hidden {
       display: none;
     }
+    
+    /* Toggle Switch Styles */
+    .toggle-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 11px;
+    }
+    
+    .toggle-switch {
+      position: relative;
+      width: 50px;
+      height: 24px;
+      background: #f44336;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    
+    .toggle-switch.active {
+      background: #4CAF50;
+    }
+    
+    .toggle-circle {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      transition: left 0.3s ease;
+    }
+    
+    .toggle-switch.active .toggle-circle {
+      left: 28px;
+    }
+    
+    .toggle-label {
+      font-size: 12px;
+      font-weight: bold;
+    }
+    
+    /* Video List Styles */
+    .video-list {
+      max-height: 200px;
+      overflow-y: auto;
+      background: #1a1a1a;
+      border-radius: 8px;
+      padding: 10px;
+    }
+    
+    .video-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
+      margin-bottom: 6px;
+      background: #2a2a2a;
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+    
+    .video-item:hover {
+      background: #3a3a3a;
+    }
+    
+    .video-item:last-child {
+      margin-bottom: 0;
+    }
+    
+    .video-checkbox {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: #9C27B0;
+    }
+    
+    .video-name {
+      font-size: 13px;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    .no-videos {
+      text-align: center;
+      opacity: 0.5;
+      font-size: 13px;
+      padding: 20px;
+    }
   </style>
 </head>
 <body>
@@ -427,6 +528,26 @@
         </div>
       </div>
     </div>
+    
+    <!-- Pop-Up Control Box -->
+    <div class="control-panel popup-panel collapsed" id="popupPanel">
+      <div class="panel-header collapsed" id="popupHeader">
+        <span class="panel-arrow collapsed">˅</span>
+        <span class="panel-title">Pop-Up</span>
+      </div>
+      <div class="panel-content collapsed" id="popupContent">
+        <div class="toggle-container">
+          <span class="toggle-label">Power</span>
+          <div class="toggle-switch" id="popupToggle">
+            <div class="toggle-circle"></div>
+          </div>
+        </div>
+        
+        <div class="video-list" id="videoList">
+          <div class="no-videos">Loading videos...</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -457,6 +578,17 @@
     const spotifyContent = document.getElementById('spotifyContent');
     const timerHeader = document.getElementById('timerHeader');
     const timerContent = document.getElementById('timerContent');
+    
+    // Pop-Up Elements
+    const popupHeader = document.getElementById('popupHeader');
+    const popupContent = document.getElementById('popupContent');
+    const popupToggle = document.getElementById('popupToggle');
+    const popupPanel = document.getElementById('popupPanel');
+    const videoList = document.getElementById('videoList');
+    
+    let availableVideos = [];
+    let selectedVideos = [];
+    let popupActive = false;
     
     let currentLanguage = 'de';
     
@@ -490,6 +622,10 @@
     
     timerHeader.addEventListener('click', () => {
       togglePanel(timerHeader, timerContent);
+    });
+    
+    popupHeader.addEventListener('click', () => {
+      togglePanel(popupHeader, popupContent);
     });
     
     // Language Switch
@@ -725,6 +861,120 @@
     checkSpotifyConnection();
     setInterval(loadState, 500);
     loadState();
+    
+    // ===== POP-UP FUNCTIONS =====
+    
+    // Load available videos
+    async function loadVideos() {
+      try {
+        const res = await fetch(`${API_URL}/api/popup/videos`);
+        const data = await res.json();
+        availableVideos = data.videos || [];
+        renderVideoList();
+      } catch (err) {
+        console.error('Error loading videos:', err);
+      }
+    }
+    
+    // Render video list with checkboxes
+    function renderVideoList() {
+      if (availableVideos.length === 0) {
+        videoList.innerHTML = '<div class="no-videos">No videos found in /pop folder</div>';
+        return;
+      }
+      
+      videoList.innerHTML = '';
+      availableVideos.forEach(video => {
+        const item = document.createElement('div');
+        item.className = 'video-item';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'video-checkbox';
+        checkbox.id = `video-${video}`;
+        checkbox.checked = selectedVideos.includes(video);
+        
+        checkbox.addEventListener('change', (e) => {
+          if (e.target.checked) {
+            if (!selectedVideos.includes(video)) {
+              selectedVideos.push(video);
+            }
+          } else {
+            selectedVideos = selectedVideos.filter(v => v !== video);
+          }
+          savePopupState();
+        });
+        
+        const label = document.createElement('label');
+        label.className = 'video-name';
+        label.htmlFor = `video-${video}`;
+        label.textContent = video;
+        label.style.cursor = 'pointer';
+        
+        item.appendChild(checkbox);
+        item.appendChild(label);
+        videoList.appendChild(item);
+      });
+    }
+    
+    // Toggle switch
+    popupToggle.addEventListener('click', async () => {
+      popupActive = !popupActive;
+      
+      if (popupActive) {
+        popupToggle.classList.add('active');
+        popupPanel.classList.add('active');
+      } else {
+        popupToggle.classList.remove('active');
+        popupPanel.classList.remove('active');
+      }
+      
+      await savePopupState();
+    });
+    
+    // Save popup state to server
+    async function savePopupState() {
+      try {
+        await fetch(`${API_URL}/api/popup/state`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            isActive: popupActive,
+            selectedVideos: selectedVideos
+          })
+        });
+      } catch (err) {
+        console.error('Error saving popup state:', err);
+      }
+    }
+    
+    // Load popup state from server
+    async function loadPopupState() {
+      try {
+        const res = await fetch(`${API_URL}/api/popup/state`);
+        const data = await res.json();
+        
+        popupActive = data.isActive || false;
+        selectedVideos = data.selectedVideos || [];
+        
+        if (popupActive) {
+          popupToggle.classList.add('active');
+          popupPanel.classList.add('active');
+        } else {
+          popupToggle.classList.remove('active');
+          popupPanel.classList.remove('active');
+        }
+        
+        renderVideoList();
+      } catch (err) {
+        console.error('Error loading popup state:', err);
+      }
+    }
+    
+    // Initialize popup module
+    loadVideos();
+    loadPopupState();
+    setInterval(loadPopupState, 3000); // Sync state every 3 seconds
   </script>
 </body>
 </html>
