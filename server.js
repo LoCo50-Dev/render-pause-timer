@@ -9,56 +9,39 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // ===== USER CONFIGURATION =====
-// Einfache User-Struktur: nur ID und Name
-// YT_ID wird aus dem ENV geladen und einem User zugeordnet
 const USERS = [
   {
-    id: 'SD-A98DB',           // User ID für Ordner (z.B. /pop/SD-A98DB/)
-    name: '@ExplorerLoCo50'   // Anzeigename im UI
+    id: 'SD-A98DB',
+    name: '@ExplorerLoCo50'
   },
-    {
+  {
     id: 'SD-X69MM',          
     name: '@mevm_yt'  
   },
-    {
+  {
     id: 'SD-H6RSG',          
     name: '@R34dySethG0'   
   },
   {
-    id: 'none',               // Fallback User wenn keine YT_ID gesetzt
+    id: 'none',
     name: 'Guest'
   }
-  // Weitere User hinzufügen:
-  // {
-  //   id: 'SD-XYZ123',
-  //   name: '@AnotherStreamer'
-  // }
 ];
 
-// TOTP Configuration - Setze "NONE" um Passwort zu deaktivieren
 const TOTP_SECRET = process.env.TOTP_SECRET;
 const AUTH_DISABLED = TOTP_SECRET === 'NONE';
-
-// YT_ID aus Environment - wird verwendet um den aktuellen User zu bestimmen
 const YT_ID = process.env.YT_ID || 'none';
 
-// Finde den User basierend auf YT_ID
 function getCurrentUser() {
-  // Suche User dessen ID mit YT_ID übereinstimmt
   const user = USERS.find(u => u.id === YT_ID);
-  // Fallback zu 'none' User wenn nicht gefunden
   return user || USERS.find(u => u.id === 'none');
 }
 
-// Spotify API Configuration
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://lc5-streamdesk.onrender.com/callback';
 
-// Session Store (wird bei jedem Neustart geleert)
 const activeSessions = new Map();
-
-// In-Memory State (per user)
 const userStates = new Map();
 
 function getUserState(userId) {
@@ -93,18 +76,14 @@ function getUserState(userId) {
   return userStates.get(userId);
 }
 
-// Video rotation interval (10 minutes)
 const VIDEO_INTERVAL = 10 * 60 * 1000;
 
 // ===== AUTHENTICATION =====
 
-// Verify TOTP Code
 app.post('/api/auth/verify', (req, res) => {
   const { code, sessionId } = req.body;
-  
   const currentUser = getCurrentUser();
   
-  // If auth is disabled (TOTP_SECRET=NONE), auto-approve
   if (AUTH_DISABLED) {
     activeSessions.set(sessionId, currentUser.id);
     return res.json({ 
@@ -143,44 +122,6 @@ app.post('/api/auth/verify', (req, res) => {
   }
 });
 
-// Check if session is valid (not used anymore - always require new login)
-app.post('/api/auth/check', (req, res) => {
-  // Sessions don't persist - always return invalid
-  res.json({ valid: false });
-});
-
-// Get current user info
-app.get('/api/auth/user', (req, res) => {
-  const sessionId = req.headers['x-session-id'];
-  
-  if (!sessionId) {
-    return res.status(401).json({ error: 'No session' });
-  }
-  
-  const userId = activeSessions.get(sessionId);
-  if (!userId) {
-    return res.status(401).json({ error: 'Invalid session' });
-  }
-  
-  const user = USERS.find(u => u.id === userId);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
-  
-  res.json({
-    id: user.id,
-    name: user.name
-  });
-});
-
-// Logout
-app.post('/api/auth/logout', (req, res) => {
-  const { sessionId } = req.body;
-  activeSessions.delete(sessionId);
-  res.json({ success: true });
-});
-
-// Middleware to get userId from session
 function getUserFromSession(req, res, next) {
   const sessionId = req.headers['x-session-id'];
   if (!sessionId) {
@@ -198,20 +139,17 @@ function getUserFromSession(req, res, next) {
 
 // ===== TIMER STATE =====
 
-// GET State
 app.get('/api/state', getUserFromSession, (req, res) => {
   const state = getUserState(req.userId);
   res.json(state.timer);
 });
 
-// POST Update State
 app.post('/api/state', getUserFromSession, (req, res) => {
   const state = getUserState(req.userId);
   state.timer = { ...state.timer, ...req.body };
   res.json(state.timer);
 });
 
-// Reset State
 app.post('/api/reset', getUserFromSession, (req, res) => {
   const state = getUserState(req.userId);
   state.timer = {
@@ -226,8 +164,6 @@ app.post('/api/reset', getUserFromSession, (req, res) => {
   };
   res.json(state.timer);
 });
-
-// ===== TIMER AUTO-EXTEND LOGIC =====
 
 setInterval(() => {
   userStates.forEach((state, userId) => {
@@ -255,7 +191,6 @@ setInterval(() => {
 
 // ===== POP-UP =====
 
-// Pop-Up - Get available videos for user
 app.get('/api/popup/videos', getUserFromSession, (req, res) => {
   const userId = req.userId;
   const popDir = path.join(__dirname, 'public', 'pop', userId);
@@ -275,13 +210,11 @@ app.get('/api/popup/videos', getUserFromSession, (req, res) => {
   }
 });
 
-// Pop-Up - Get state
 app.get('/api/popup/state', getUserFromSession, (req, res) => {
   const state = getUserState(req.userId);
   res.json(state.popup);
 });
 
-// Pop-Up - Update state
 app.post('/api/popup/state', getUserFromSession, (req, res) => {
   const state = getUserState(req.userId);
   state.popup = { ...state.popup, ...req.body };
@@ -296,7 +229,6 @@ app.post('/api/popup/state', getUserFromSession, (req, res) => {
   res.json(state.popup);
 });
 
-// Pop-Up - Get current video (public endpoint for popup.html)
 app.get('/api/popup/current/:userId', (req, res) => {
   const state = getUserState(req.params.userId);
   res.json({ 
@@ -306,7 +238,6 @@ app.get('/api/popup/current/:userId', (req, res) => {
   });
 });
 
-// Video rotation logic
 function startVideoRotation(userId) {
   const state = getUserState(userId);
   const popup = state.popup;
@@ -328,7 +259,6 @@ function startVideoRotation(userId) {
   }
 }
 
-// Check video rotation every minute
 setInterval(() => {
   userStates.forEach((state, userId) => {
     if (state.popup.isActive && state.popup.selectedVideos.length > 0) {
@@ -339,14 +269,12 @@ setInterval(() => {
 
 // ===== SPOTIFY =====
 
-// Spotify Auth - Step 1: Redirect to Spotify
 app.get('/spotify/login', getUserFromSession, (req, res) => {
   const scopes = 'user-read-playback-state user-modify-playback-state user-read-currently-playing';
   const authUrl = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}&state=${req.userId}`;
   res.redirect(authUrl);
 });
 
-// Spotify Auth - Step 2: Callback
 app.get('/callback', async (req, res) => {
   const code = req.query.code;
   const userId = req.query.state;
@@ -380,7 +308,6 @@ app.get('/callback', async (req, res) => {
   }
 });
 
-// Spotify - Get Current Track
 app.get('/api/spotify/current', getUserFromSession, async (req, res) => {
   const state = getUserState(req.userId);
   
@@ -414,7 +341,6 @@ app.get('/api/spotify/current', getUserFromSession, async (req, res) => {
   }
 });
 
-// Spotify - Play/Pause
 app.post('/api/spotify/playpause', getUserFromSession, async (req, res) => {
   const state = getUserState(req.userId);
   
@@ -436,7 +362,6 @@ app.post('/api/spotify/playpause', getUserFromSession, async (req, res) => {
   }
 });
 
-// Spotify - Skip
 app.post('/api/spotify/skip', getUserFromSession, async (req, res) => {
   const state = getUserState(req.userId);
   
@@ -456,7 +381,6 @@ app.post('/api/spotify/skip', getUserFromSession, async (req, res) => {
   }
 });
 
-// Spotify - Set Volume
 app.post('/api/spotify/volume', getUserFromSession, async (req, res) => {
   const state = getUserState(req.userId);
   
@@ -479,7 +403,6 @@ app.post('/api/spotify/volume', getUserFromSession, async (req, res) => {
   }
 });
 
-// Get Spotify State
 app.get('/api/spotify/state', getUserFromSession, (req, res) => {
   const state = getUserState(req.userId);
   res.json({
