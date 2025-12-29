@@ -98,6 +98,76 @@
       display: block;
     }
     
+    /* USER PROFILE BOX */
+    .user-profile-box {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2a2a2a;
+      border-radius: 15px;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      z-index: 1000;
+      border: 3px solid;
+      border-image: linear-gradient(90deg, 
+        red, 
+        orange, 
+        yellow, 
+        green, 
+        blue, 
+        indigo, 
+        violet,
+        red
+      ) 1;
+      animation: rainbow-border 4s linear infinite;
+      background-clip: padding-box;
+    }
+    
+    @keyframes rainbow-border {
+      0% {
+        border-image-source: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet, red);
+      }
+      14% {
+        border-image-source: linear-gradient(90deg, orange, yellow, green, blue, indigo, violet, red, orange);
+      }
+      28% {
+        border-image-source: linear-gradient(90deg, yellow, green, blue, indigo, violet, red, orange, yellow);
+      }
+      42% {
+        border-image-source: linear-gradient(90deg, green, blue, indigo, violet, red, orange, yellow, green);
+      }
+      57% {
+        border-image-source: linear-gradient(90deg, blue, indigo, violet, red, orange, yellow, green, blue);
+      }
+      71% {
+        border-image-source: linear-gradient(90deg, indigo, violet, red, orange, yellow, green, blue, indigo);
+      }
+      85% {
+        border-image-source: linear-gradient(90deg, violet, red, orange, yellow, green, blue, indigo, violet);
+      }
+      100% {
+        border-image-source: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet, red);
+      }
+    }
+    
+    .user-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid #4CAF50;
+    }
+    
+    .user-name {
+      font-size: 14px;
+      font-weight: bold;
+      color: white;
+    }
+    
     /* MAIN CONTAINER */
     .container {
       display: flex;
@@ -105,6 +175,7 @@
       gap: 15px;
       width: 100%;
       max-width: 320px;
+      margin-top: 80px;
     }
     
     .hidden {
@@ -552,6 +623,12 @@
     <div class="error-message" id="errorMessage">Invalid code. Please try again.</div>
   </div>
 
+  <!-- USER PROFILE BOX -->
+  <div class="user-profile-box hidden" id="userProfileBox">
+    <img src="/user/none.png" alt="User Avatar" class="user-avatar" id="userAvatar">
+    <span class="user-name" id="userName">Guest</span>
+  </div>
+
   <!-- MAIN CONTAINER -->
   <div class="container hidden" id="mainContainer">
     <!-- Language Control Box -->
@@ -642,6 +719,7 @@
     let currentState = null;
     let spotifyConnected = false;
     let sessionId = null;
+    let currentUser = null;
     
     // Elements
     const loginScreen = document.getElementById('loginScreen');
@@ -649,6 +727,9 @@
     const codeInput = document.getElementById('codeInput');
     const btnLogin = document.getElementById('btnLogin');
     const errorMessage = document.getElementById('errorMessage');
+    const userProfileBox = document.getElementById('userProfileBox');
+    const userAvatar = document.getElementById('userAvatar');
+    const userName = document.getElementById('userName');
     
     const startBtn = document.getElementById('startBtn');
     const pauseBtn = document.getElementById('pauseBtn');
@@ -692,27 +773,6 @@
       return 'session_' + Math.random().toString(36).substring(2, 15);
     }
     
-    // Check if session exists and is valid
-    async function checkSession() {
-      sessionId = localStorage.getItem('streamdesk_session');
-      
-      if (!sessionId) {
-        return false;
-      }
-      
-      try {
-        const res = await fetch(`${API_URL}/api/auth/check`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId })
-        });
-        const data = await res.json();
-        return data.valid;
-      } catch (err) {
-        return false;
-      }
-    }
-    
     // Login with TOTP code
     async function login() {
       const code = codeInput.value.trim();
@@ -733,7 +793,7 @@
         const data = await res.json();
         
         if (data.success) {
-          localStorage.setItem('streamdesk_session', sessionId);
+          currentUser = data.user;
           showMainContainer();
         } else {
           errorMessage.classList.add('show');
@@ -750,6 +810,17 @@
     function showMainContainer() {
       loginScreen.classList.add('hidden');
       mainContainer.classList.remove('hidden');
+      userProfileBox.classList.remove('hidden');
+      
+      // Set user profile
+      if (currentUser) {
+        userName.textContent = currentUser.name;
+        userAvatar.src = `/user/${currentUser.id}.png`;
+        userAvatar.onerror = () => {
+          userAvatar.src = '/user/none.png';
+        };
+      }
+      
       initializeApp();
     }
     
@@ -768,12 +839,10 @@
       errorMessage.classList.remove('show');
     });
     
-    // Check session on page load
+    // Always show login screen on page load (no session persistence)
     (async () => {
-      const isValid = await checkSession();
-      if (isValid) {
-        showMainContainer();
-      }
+      // Don't check for existing session - always require login
+      loginScreen.classList.remove('hidden');
     })();
     
     // ===== MAIN APP INITIALIZATION =====
@@ -848,7 +917,9 @@
     
     async function checkSpotifyConnection() {
       try {
-        const res = await fetch(`${API_URL}/api/spotify/state`);
+        const res = await fetch(`${API_URL}/api/spotify/state`, {
+          headers: { 'X-Session-Id': sessionId }
+        });
         const data = await res.json();
         
         if (data.connected) {
@@ -867,7 +938,9 @@
       if (!spotifyConnected) return;
       
       try {
-        const res = await fetch(`${API_URL}/api/spotify/state`);
+        const res = await fetch(`${API_URL}/api/spotify/state`, {
+          headers: { 'X-Session-Id': sessionId }
+        });
         const data = await res.json();
         
         if (data.isPlaying) {
@@ -887,7 +960,10 @@
       try {
         await fetch(`${API_URL}/api/spotify/volume`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Session-Id': sessionId
+          },
           body: JSON.stringify({ volume })
         });
       } catch (err) {
@@ -898,7 +974,8 @@
     playPauseBtn.addEventListener('click', async () => {
       try {
         const res = await fetch(`${API_URL}/api/spotify/playpause`, {
-          method: 'POST'
+          method: 'POST',
+          headers: { 'X-Session-Id': sessionId }
         });
         const data = await res.json();
         
@@ -919,7 +996,8 @@
     skipBtn.addEventListener('click', async () => {
       try {
         await fetch(`${API_URL}/api/spotify/skip`, {
-          method: 'POST'
+          method: 'POST',
+          headers: { 'X-Session-Id': sessionId }
         });
       } catch (err) {
         console.error('Skip error:', err);
@@ -945,7 +1023,10 @@
       try {
         const res = await fetch(`${API_URL}/api/state`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Session-Id': sessionId
+          },
           body: JSON.stringify(newState)
         });
         currentState = await res.json();
@@ -957,7 +1038,9 @@
     
     async function loadState() {
       try {
-        const res = await fetch(`${API_URL}/api/state`);
+        const res = await fetch(`${API_URL}/api/state`, {
+          headers: { 'X-Session-Id': sessionId }
+        });
         currentState = await res.json();
         
         if (currentState.language) {
@@ -1062,7 +1145,10 @@
     resetBtn.addEventListener('click', async () => {
       if (timerInterval) clearInterval(timerInterval);
       
-      await fetch(`${API_URL}/api/reset`, { method: 'POST' });
+      await fetch(`${API_URL}/api/reset`, { 
+        method: 'POST',
+        headers: { 'X-Session-Id': sessionId }
+      });
       await updateState({
         duration: 0,
         remaining: 0,
@@ -1077,7 +1163,9 @@
     
     async function loadVideos() {
       try {
-        const res = await fetch(`${API_URL}/api/popup/videos`);
+        const res = await fetch(`${API_URL}/api/popup/videos`, {
+          headers: { 'X-Session-Id': sessionId }
+        });
         const data = await res.json();
         availableVideos = data.videos || [];
         renderVideoList();
@@ -1144,7 +1232,10 @@
       try {
         await fetch(`${API_URL}/api/popup/state`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Session-Id': sessionId
+          },
           body: JSON.stringify({
             isActive: popupActive,
             selectedVideos: selectedVideos
@@ -1157,7 +1248,9 @@
     
     async function loadPopupState() {
       try {
-        const res = await fetch(`${API_URL}/api/popup/state`);
+        const res = await fetch(`${API_URL}/api/popup/state`, {
+          headers: { 'X-Session-Id': sessionId }
+        });
         const data = await res.json();
         
         popupActive = data.isActive || false;
