@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -29,6 +31,17 @@ let spotifyState = {
   currentTrack: null
 };
 
+let popupState = {
+  isActive: false,
+  selectedVideos: [],
+  currentVideoIndex: 0,
+  currentVideo: null,
+  lastPlayedTime: null
+};
+
+// Video rotation interval (10 minutes)
+const VIDEO_INTERVAL = 10 * 60 * 1000;
+
 // GET State
 app.get('/api/state', (req, res) => {
   res.json(timerState);
@@ -53,6 +66,82 @@ app.post('/api/reset', (req, res) => {
   };
   res.json(timerState);
 });
+
+// Pop-Up - Get available videos
+app.get('/api/popup/videos', (req, res) => {
+  const popDir = path.join(__dirname, 'public', 'pop');
+  
+  try {
+    if (!fs.existsSync(popDir)) {
+      fs.mkdirSync(popDir, { recursive: true });
+      return res.json({ videos: [] });
+    }
+    
+    const files = fs.readdirSync(popDir);
+    const videos = files.filter(file => file.endsWith('.mp4'));
+    
+    res.json({ videos });
+  } catch (err) {
+    res.json({ videos: [], error: err.message });
+  }
+});
+
+// Pop-Up - Get state
+app.get('/api/popup/state', (req, res) => {
+  res.json(popupState);
+});
+
+// Pop-Up - Update state
+app.post('/api/popup/state', (req, res) => {
+  popupState = { ...popupState, ...req.body };
+  
+  // If activating, start rotation
+  if (popupState.isActive && popupState.selectedVideos.length > 0) {
+    startVideoRotation();
+  } else if (!popupState.isActive) {
+    popupState.currentVideo = null;
+    popupState.lastPlayedTime = null;
+  }
+  
+  res.json(popupState);
+});
+
+// Pop-Up - Get current video
+app.get('/api/popup/current', (req, res) => {
+  res.json({ 
+    currentVideo: popupState.currentVideo,
+    isActive: popupState.isActive
+  });
+});
+
+// Video rotation logic
+function startVideoRotation() {
+  if (!popupState.isActive || popupState.selectedVideos.length === 0) {
+    return;
+  }
+  
+  const now = Date.now();
+  
+  // Check if 10 minutes have passed since last video
+  if (!popupState.lastPlayedTime || (now - popupState.lastPlayedTime >= VIDEO_INTERVAL)) {
+    // Play next video
+    const video = popupState.selectedVideos[popupState.currentVideoIndex];
+    popupState.currentVideo = video;
+    popupState.lastPlayedTime = now;
+    
+    // Move to next video (loop back to 0 after last)
+    popupState.currentVideoIndex = (popupState.currentVideoIndex + 1) % popupState.selectedVideos.length;
+    
+    console.log(`Playing video: ${video} at ${new Date().toLocaleTimeString()}`);
+  }
+}
+
+// Check video rotation every minute
+setInterval(() => {
+  if (popupState.isActive && popupState.selectedVideos.length > 0) {
+    startVideoRotation();
+  }
+}, 60 * 1000);
 
 // Spotify Auth - Step 1: Redirect to Spotify
 app.get('/spotify/login', (req, res) => {
