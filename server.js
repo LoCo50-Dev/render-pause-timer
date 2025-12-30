@@ -32,8 +32,7 @@ let userState = {
     isRunning: false,
     wasSkipped: false,
     language: 'de',
-    autoExtendTime: null,
-    lastUpdateTime: null // NEW: Track last update for accurate countdown
+    autoExtendTime: null
   },
   spotify: {
     accessToken: null,
@@ -154,11 +153,7 @@ function getUserFromSession(req, res, next) {
 function calculateRemainingTime() {
   const timer = userState.timer;
   
-  if (!timer.isRunning || timer.isPaused) {
-    return timer.remaining;
-  }
-  
-  if (!timer.endTime) {
+  if (!timer.isRunning || timer.isPaused || !timer.endTime) {
     return timer.remaining;
   }
   
@@ -170,25 +165,11 @@ function calculateRemainingTime() {
 
 // Public endpoint for countdown display (no auth required)
 app.get('/api/state/public', (req, res) => {
-  const timer = { ...userState.timer };
-  
-  // Always calculate for display
-  if (timer.isRunning && !timer.isPaused && timer.endTime) {
-    timer.remaining = calculateRemainingTime();
-  }
-  
-  res.json(timer);
+  res.json(userState.timer);
 });
 
 app.get('/api/state', getUserFromSession, (req, res) => {
-  const timer = { ...userState.timer };
-  
-  // Always calculate for control panel
-  if (timer.isRunning && !timer.isPaused && timer.endTime) {
-    timer.remaining = calculateRemainingTime();
-  }
-  
-  res.json(timer);
+  res.json(userState.timer);
 });
 
 app.post('/api/state', getUserFromSession, (req, res) => {
@@ -212,13 +193,12 @@ app.post('/api/reset', getUserFromSession, (req, res) => {
     isRunning: false,
     wasSkipped: wasRunning,
     autoExtendTime: null,
-    lastUpdateTime: null,
     language: userState.timer.language || 'de'
   };
   res.json(userState.timer);
 });
 
-// Timer countdown and auto-extend logic
+// Timer countdown logic - SIMPLE!
 setInterval(() => {
   const timer = userState.timer;
   
@@ -226,8 +206,10 @@ setInterval(() => {
     return;
   }
   
-  // Update remaining from endTime
-  timer.remaining = calculateRemainingTime();
+  // Calculate remaining from endTime
+  const now = Date.now();
+  const remaining = Math.floor((timer.endTime - now) / 1000);
+  timer.remaining = Math.max(0, remaining);
   
   // Auto-extend after timer reaches 0
   if (timer.remaining <= 0 && !timer.autoExtendTime) {
@@ -239,7 +221,7 @@ setInterval(() => {
     const extension = 5 * 60;
     timer.duration += extension;
     timer.remaining = extension;
-    timer.endTime = Date.now() + (extension * 1000) + 1000; // +1s buffer
+    timer.endTime = Date.now() + (extension * 1000);
     timer.autoExtendTime = null;
     console.log('Timer auto-extended by 5 minutes');
   }
