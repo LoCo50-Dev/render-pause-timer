@@ -1,1230 +1,458 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>StreamDesk Control</title>
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const speakeasy = require('speakeasy');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+app.use(express.static('public'));
+
+// ===== AUTHENTICATION CONFIG =====
+function isAuthEnabled() {
+  const totpSecret = process.env.TOTP_SECRET;
+  return totpSecret && totpSecret !== 'NONE';
+}
+
+const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
+const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
+const REDIRECT_URI = process.env.REDIRECT_URI || 'https://lc5-streamdesk.onrender.com/callback';
+
+const activeSessions = new Map();
+
+// ===== USER STATE (MUST BE DEFINED BEFORE INTERVALS!) =====
+let userState = {
+  timer: {
+    duration: 0,
+    remaining: 0,
+    endTime: null,
+    isPaused: false,
+    isRunning: false,
+    wasSkipped: false,
+    language: 'de',
+    autoExtendTime: null
+  },
+  spotify: {
+    accessToken: null,
+    refreshToken: null,
+    volume: 50,
+    isPlaying: false,
+    currentTrack: null
+  },
+  popup: {
+    isActive: false,
+    selectedVideos: [],
+    currentVideoIndex: 0,
+    currentVideo: null,
+    lastPlayedTime: null
+  }
+};
+
+const VIDEO_INTERVAL = 10 * 60 * 1000;
+
+// ===== HELPER FUNCTIONS =====
+function getUserInfo() {
+  const userDir = path.join(__dirname, 'public', 'user');
   
-  <link rel="icon" type="image/x-icon" href="/assets/icon.ico">
-  <link rel="apple-touch-icon" href="/assets/icon.ico">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="StreamDesk">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#2a2a2a">
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+  try {
+    if (!fs.existsSync(userDir)) {
+      return { name: 'Guest', avatar: 'none.png' };
     }
     
-    body {
-      font-family: Arial, sans-serif;
-      background: transparent;
-      color: white;
-      padding: 20px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-    }
-    
-    .login-screen {
-      background: #2a2a2a;
-      border-radius: 15px;
-      padding: 30px;
-      max-width: 320px;
-      width: 100%;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-      text-align: center;
-    }
-    
-    .login-screen h2 {
-      margin-bottom: 20px;
-      font-size: 24px;
-    }
-    
-    .login-screen p {
-      margin-bottom: 20px;
-      opacity: 0.7;
-      font-size: 14px;
-    }
-    
-    .code-input {
-      width: 100%;
-      padding: 15px;
-      font-size: 24px;
-      letter-spacing: 8px;
-      text-align: center;
-      background: #1a1a1a;
-      border: 2px solid #3a3a3a;
-      border-radius: 8px;
-      color: white;
-      margin-bottom: 15px;
-    }
-    
-    .code-input:focus {
-      outline: none;
-      border-color: #4CAF50;
-    }
-    
-    .btn-login {
-      width: 100%;
-      padding: 15px;
-      background: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    
-    .btn-login:hover {
-      background: #45a049;
-    }
-    
-    .btn-login:disabled {
-      background: #666;
-      cursor: not-allowed;
-    }
-    
-    .error-message {
-      color: #f44336;
-      margin-top: 10px;
-      font-size: 14px;
-      display: none;
-    }
-    
-    .error-message.show {
-      display: block;
-    }
-    
-    .user-profile-box {
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 3px;
-      display: flex;
-      align-items: center;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-      z-index: 1000;
-      border-radius: 18px;
-      background: linear-gradient(
-        90deg,
-        #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3,
-        #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000
-      );
-      background-size: 300% 100%;
-      animation: rainbow-flow 15s linear infinite;
-    }
-    
-    .user-profile-inner {
-      background: #2a2a2a;
-      border-radius: 15px;
-      padding: 10px 20px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    
-    @keyframes rainbow-flow {
-      0% { background-position: 0% 0%; }
-      100% { background-position: 300% 0%; }
-    }
-    
-    .user-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 2px solid #4CAF50;
-    }
-    
-    .user-name {
-      font-size: 14px;
-      font-weight: bold;
-      color: white;
-    }
-    
-    .container {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-      width: 100%;
-      max-width: 320px;
-      margin-top: 80px;
-    }
-    
-    .hidden {
-      display: none !important;
-    }
-    
-    .control-panel {
-      background: #2a2a2a;
-      border-radius: 15px;
-      padding: 18px;
-      width: 100%;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-      transition: padding 0.3s ease, border-color 0.5s ease;
-    }
-    
-    .control-panel.collapsed {
-      padding: 8px 12px;
-    }
-    
-    .spotify-panel {
-      border: 2px solid #0d5c1f;
-      transition: border-color 0.5s ease;
-    }
-    
-    .spotify-panel.playing {
-      border-color: #1DB954;
-    }
-    
-    .timer-panel {
-      border: 2px solid #1a3a52;
-      transition: border-color 0.5s ease;
-    }
-    
-    .timer-panel.running {
-      border-color: #00BCD4;
-    }
-    
-    .language-panel {
-      border: 2px solid #FF9800;
-      padding: 11px;
-    }
-    
-    .popup-panel {
-      border: 2px solid #4a1a5c;
-      transition: border-color 0.5s ease;
-    }
-    
-    .popup-panel.active {
-      border-color: #E91E63;
-    }
-    
-    .language-buttons {
-      display: flex;
-      gap: 10px;
-    }
-    
-    .btn-language {
-      flex: 1;
-      padding: 0;
-      border: 2px solid #3a3a3a;
-      border-radius: 8px;
-      cursor: pointer;
-      background: #1a1a1a;
-      transition: all 0.3s;
-      overflow: hidden;
-      height: 60px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    
-    .btn-language.active {
-      border-color: #FF9800;
-      background: #2a2a2a;
-      box-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
-    }
-    
-    .btn-language:hover {
-      background: #2a2a2a;
-    }
-    
-    .flag-img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    
-    .panel-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      user-select: none;
-      margin-bottom: 11px;
-      padding: 0;
-    }
-    
-    .panel-header.collapsed {
-      margin-bottom: 0;
-    }
-    
-    .panel-arrow {
-      font-size: 16px;
-      transition: transform 0.3s ease;
-      color: white;
-      line-height: 1;
-    }
-    
-    .panel-arrow.collapsed {
-      transform: rotate(-90deg);
-    }
-    
-    .panel-title {
-      font-size: 12px;
-      font-weight: bold;
-      opacity: 1;
-      transition: opacity 0.3s ease;
-      line-height: 1;
-    }
-    
-    .panel-title.hidden {
-      opacity: 0;
-    }
-    
-    .panel-content {
-      max-height: 1000px;
-      overflow: hidden;
-      transition: max-height 0.3s ease, opacity 0.3s ease;
-      opacity: 1;
-    }
-    
-    .panel-content.collapsed {
-      max-height: 0;
-      opacity: 0;
-    }
-    
-    .preview {
-      background: #1a1a1a;
-      padding: 15px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      text-align: center;
-    }
+    const files = fs.readdirSync(userDir);
+    const pngFile = files.find(file => file.endsWith('.png'));
     
-    .btn-spotify-connect {
-      width: 100%;
-      padding: 12px;
-      background: #1DB954;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 15px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: background 0.3s;
+    if (pngFile) {
+      const name = path.basename(pngFile, '.png');
+      return { name, avatar: pngFile };
     }
     
-    .btn-spotify-connect:hover {
-      background: #1ed760;
-    }
-    
-    .spotify-controls {
-      background: #1a1a1a;
-      padding: 15px;
-      border-radius: 10px;
-    }
-    
-    .volume-control {
-      margin-bottom: 15px;
-    }
-    
-    .volume-control label {
-      display: block;
-      margin-bottom: 8px;
-      font-size: 14px;
-      text-align: center;
-    }
-    
-    .slider {
-      width: 100%;
-      height: 6px;
-      border-radius: 3px;
-      background: #3a3a3a;
-      outline: none;
-      -webkit-appearance: none;
-    }
-    
-    .slider::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: #1DB954;
-      cursor: pointer;
-    }
-    
-    .slider::-moz-range-thumb {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: #1DB954;
-      cursor: pointer;
-      border: none;
-    }
-    
-    .music-buttons {
-      display: flex;
-      gap: 10px;
-    }
-    
-    .btn-music {
-      flex: 1;
-      padding: 15px;
-      border: none;
-      border-radius: 8px;
-      font-size: 20px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-    
-    .btn-pause {
-      background: #555;
-    }
-    
-    .btn-pause.paused {
-      background: #444;
-      opacity: 0.7;
-    }
-    
-    .btn-pause.playing {
-      background: #1DB954;
-      animation: pulse 2s ease-in-out infinite;
-    }
-    
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
-    }
-    
-    .btn-skip {
-      background: #FF9800;
-    }
-    
-    .btn-skip:hover {
-      background: #e68900;
-    }
-    
-    .preview-time {
-      font-size: 28px;
-      font-weight: bold;
-      margin-bottom: 8px;
-    }
-    
-    .preview-end {
-      font-size: 14px;
-      opacity: 0.7;
-    }
-    
-    .input-group {
-      margin-bottom: 15px;
-    }
-    
-    label {
-      display: block;
-      margin-bottom: 6px;
-      font-size: 13px;
-      opacity: 0.8;
-    }
-    
-    input {
-      width: 100%;
-      padding: 10px;
-      background: #1a1a1a;
-      border: 2px solid #3a3a3a;
-      border-radius: 8px;
-      color: white;
-      font-size: 15px;
-      transition: border-color 0.3s;
-    }
-    
-    input:focus {
-      outline: none;
-      border-color: #4CAF50;
-    }
-    
-    .button-group {
-      display: flex;
-      gap: 8px;
-      margin-top: 15px;
-    }
-    
-    button {
-      flex: 1;
-      padding: 12px;
-      border: none;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-    
-    .btn-start {
-      background: #4CAF50;
-      color: white;
-    }
-    
-    .btn-start:hover {
-      background: #45a049;
-    }
-    
-    .btn-pause-timer {
-      background: #FF9800;
-      color: white;
-    }
-    
-    .btn-pause-timer:hover {
-      background: #e68900;
-    }
-    
-    .btn-reset {
-      background: #f44336;
-      color: white;
-    }
-    
-    .btn-reset:hover {
-      background: #da190b;
-    }
-    
-    .toggle-container {
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      margin-bottom: 11px;
-    }
-    
-    .toggle-switch {
-      position: relative;
-      width: 50px;
-      height: 24px;
-      background: #f44336;
-      border-radius: 12px;
-      cursor: pointer;
-      transition: background-color 0.3s ease;
-    }
-    
-    .toggle-switch.active {
-      background: #4CAF50;
-    }
-    
-    .toggle-circle {
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 20px;
-      height: 20px;
-      background: white;
-      border-radius: 50%;
-      transition: left 0.3s ease;
-    }
-    
-    .toggle-switch.active .toggle-circle {
-      left: 28px;
-    }
-    
-    .video-list {
-      max-height: 200px;
-      overflow-y: auto;
-      background: #1a1a1a;
-      border-radius: 8px;
-      padding: 10px;
-    }
-    
-    .video-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px;
-      margin-bottom: 6px;
-      background: #2a2a2a;
-      border-radius: 6px;
-      transition: background 0.2s;
-    }
-    
-    .video-item:hover {
-      background: #3a3a3a;
-    }
-    
-    .video-item:last-child {
-      margin-bottom: 0;
-    }
-    
-    .video-checkbox {
-      width: 18px;
-      height: 18px;
-      cursor: pointer;
-      accent-color: #9C27B0;
-    }
-    
-    .video-name {
-      font-size: 13px;
-      flex: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    
-    .no-videos {
-      text-align: center;
-      opacity: 0.5;
-      font-size: 13px;
-      padding: 20px;
-    }
-  </style>
-</head>
-<body>
-  <div class="login-screen" id="loginScreen">
-    <h2>🔐 StreamDesk</h2>
-    <p>Enter your 6-digit code</p>
-    <input type="text" class="code-input" id="codeInput" maxlength="6" placeholder="000000" autofocus>
-    <button class="btn-login" id="btnLogin">Login</button>
-    <div class="error-message" id="errorMessage">Invalid code. Please try again.</div>
-  </div>
+    return { name: 'Guest', avatar: 'none.png' };
+  } catch (err) {
+    console.error('Error reading user info:', err);
+    return { name: 'Guest', avatar: 'none.png' };
+  }
+}
 
-  <div class="user-profile-box hidden" id="userProfileBox">
-    <div class="user-profile-inner">
-      <img src="/user/none.png" alt="User Avatar" class="user-avatar" id="userAvatar">
-      <span class="user-name" id="userName">Guest</span>
-    </div>
-  </div>
+function calculateRemainingTime() {
+  const timer = userState.timer;
+  
+  if (!timer.isRunning || timer.isPaused || !timer.endTime) {
+    return timer.remaining;
+  }
+  
+  const now = Date.now();
+  const remaining = Math.max(0, Math.ceil((timer.endTime - now) / 1000));
+  
+  return remaining;
+}
 
-  <div class="container hidden" id="mainContainer">
-    <div class="control-panel language-panel">
-      <div class="language-buttons">
-        <button class="btn-language active" id="btnGerman" data-lang="de">
-          <img src="/assets/de.webp" alt="Deutsch" class="flag-img">
-        </button>
-        <button class="btn-language" id="btnEnglish" data-lang="en">
-          <img src="/assets/en.webp" alt="English" class="flag-img">
-        </button>
-      </div>
-    </div>
-    
-    <div class="control-panel spotify-panel collapsed" id="spotifyPanel">
-      <div class="panel-header collapsed" id="spotifyHeader">
-        <span class="panel-arrow collapsed">˅</span>
-        <span class="panel-title">Music</span>
-      </div>
-      <div class="panel-content collapsed" id="spotifyContent">
-        <div id="spotifyStatus">
-          <button class="btn-spotify-connect" id="spotifyConnectBtn">🎵 Connect Spotify</button>
-        </div>
-        
-        <div class="spotify-controls hidden" id="spotifyControls">
-          <div class="volume-control">
-            <label>🔊 Volume: <span id="volumeValue">50</span>%</label>
-            <input type="range" id="volumeSlider" min="0" max="100" value="50" class="slider">
-          </div>
-          
-          <div class="music-buttons">
-            <button class="btn-music btn-pause paused" id="playPauseBtn">❚❚</button>
-            <button class="btn-music btn-skip" id="skipBtn">⏭</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <div class="control-panel timer-panel collapsed" id="timerPanel">
-      <div class="panel-header collapsed" id="timerHeader">
-        <span class="panel-arrow collapsed">˅</span>
-        <span class="panel-title">Break Timer</span>
-      </div>
-      <div class="panel-content collapsed" id="timerContent">
-        <div class="preview">
-          <div class="preview-time" id="previewTime">00:00</div>
-          <div class="preview-end" id="previewEnd">Resume: --:-- Uhr</div>
-        </div>
-        
-        <div class="input-group">
-          <label for="timeInput">Time in minutes:</label>
-          <input type="number" id="timeInput" min="1" placeholder="e.g. 5" value="5">
-        </div>
-        
-        <div class="button-group">
-          <button class="btn-start" id="startBtn">▶️ Start</button>
-          <button class="btn-pause-timer hidden" id="pauseBtn">⏸️ Pause</button>
-          <button class="btn-reset hidden" id="resetBtn">⏹️ Reset</button>
-        </div>
-      </div>
-    </div>
-    
-    <div class="control-panel popup-panel collapsed" id="popupPanel">
-      <div class="panel-header collapsed" id="popupHeader">
-        <span class="panel-arrow collapsed">˅</span>
-        <span class="panel-title">Pop-Up</span>
-      </div>
-      <div class="panel-content collapsed" id="popupContent">
-        <div class="toggle-container">
-          <div class="toggle-switch" id="popupToggle">
-            <div class="toggle-circle"></div>
-          </div>
-        </div>
-        
-        <div class="video-list" id="videoList">
-          <div class="no-videos">Loading videos...</div>
-        </div>
-      </div>
-    </div>
-  </div>
+function getUserFromSession(req, res, next) {
+  const sessionId = req.headers['x-session-id'];
+  if (!sessionId) {
+    return res.status(401).json({ error: 'No session' });
+  }
+  
+  const isValid = activeSessions.get(sessionId);
+  if (!isValid) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+  
+  next();
+}
 
-  <script>
-    const API_URL = window.location.origin;
-    let sessionId = null;
-    let currentLanguage = 'de';
-    let spotifyConnected = false;
-    let availableVideos = [];
-    let selectedVideos = [];
-    let popupActive = false;
-    let isUpdating = false;
-    let stateInterval = null;
-    let popupInterval = null;
-    let spotifyInterval = null;
-    
-    const loginScreen = document.getElementById('loginScreen');
-    const mainContainer = document.getElementById('mainContainer');
-    const codeInput = document.getElementById('codeInput');
-    const btnLogin = document.getElementById('btnLogin');
-    const errorMessage = document.getElementById('errorMessage');
-    const userProfileBox = document.getElementById('userProfileBox');
-    const userAvatar = document.getElementById('userAvatar');
-    const userName = document.getElementById('userName');
-    
-    function generateSessionId() {
-      return 'session_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Date.now();
-    }
-    
-    function getHeaders() {
-      const headers = { 'Content-Type': 'application/json' };
-      if (sessionId) {
-        headers['X-Session-Id'] = sessionId;
-      }
-      return headers;
-    }
-    
-    async function checkAuthStatus() {
-      try {
-        const res = await fetch(`${API_URL}/api/instance/info`);
-        const data = await res.json();
-        
-        console.log('Auth check:', data);
-        
-        if (!data.authRequired) {
-          // Auth disabled - auto login
-          sessionId = generateSessionId();
-          const loginRes = await fetch(`${API_URL}/api/auth/verify`, {
-            method: 'POST',
-            headers: getHeaders(),
-            body: JSON.stringify({ code: '000000', sessionId })
-          });
-          const loginData = await loginRes.json();
-          
-          if (loginData.success) {
-            showMainContainer(loginData.user);
-          }
-        } else {
-          // Auth enabled - show login
-          loginScreen.classList.remove('hidden');
-        }
-      } catch (err) {
-        console.error('Auth check error:', err);
-        loginScreen.classList.remove('hidden');
-      }
-    }
-    
-    async function login() {
-      const code = codeInput.value.trim();
-      
-      if (code.length !== 6 || !/^\d+$/.test(code)) {
-        errorMessage.classList.add('show');
-        return;
-      }
-      
-      btnLogin.disabled = true;
-      btnLogin.textContent = 'Logging in...';
-      sessionId = generateSessionId();
-      
-      try {
-        const res = await fetch(`${API_URL}/api/auth/verify`, {
-          method: 'POST',
-          headers: getHeaders(),
-          body: JSON.stringify({ code, sessionId })
-        });
-        
-        const data = await res.json();
-        
-        if (data.success) {
-          errorMessage.classList.remove('show');
-          showMainContainer(data.user);
-        } else {
-          errorMessage.classList.add('show');
-          codeInput.value = '';
-          codeInput.focus();
-          sessionId = null;
-        }
-      } catch (err) {
-        console.error('Login error:', err);
-        errorMessage.textContent = 'Connection error. Please try again.';
-        errorMessage.classList.add('show');
-        sessionId = null;
-      } finally {
-        btnLogin.disabled = false;
-        btnLogin.textContent = 'Login';
-      }
-    }
-    
-    function showMainContainer(user) {
-      loginScreen.classList.add('hidden');
-      mainContainer.classList.remove('hidden');
-      userProfileBox.classList.remove('hidden');
-      
-      if (user) {
-        userName.textContent = user.name;
-        userAvatar.src = `/user/${user.avatar}`;
-        userAvatar.onerror = () => { userAvatar.src = '/user/none.png'; };
-      }
-      
-      initializeApp();
-    }
-    
-    btnLogin.addEventListener('click', login);
-    codeInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') login();
+// ===== AUTHENTICATION ROUTES =====
+app.get('/api/instance/info', (req, res) => {
+  const userInfo = getUserInfo();
+  
+  res.json({
+    userName: userInfo.name,
+    userAvatar: userInfo.avatar,
+    authRequired: isAuthEnabled()
+  });
+});
+
+app.post('/api/auth/verify', (req, res) => {
+  const { code, sessionId } = req.body;
+  const totpSecret = process.env.TOTP_SECRET;
+  const userInfo = getUserInfo();
+  
+  console.log('=== AUTH ATTEMPT ===');
+  console.log('Received code:', code);
+  console.log('Current user:', userInfo.name);
+  console.log('Auth status:', totpSecret === 'NONE' ? 'DISABLED' : 'ENABLED');
+  
+  if (!totpSecret || totpSecret === 'NONE') {
+    console.log('Auth disabled - auto-login');
+    activeSessions.set(sessionId, true);
+    return res.json({ 
+      success: true, 
+      user: { name: userInfo.name, avatar: userInfo.avatar } 
     });
-    codeInput.addEventListener('input', () => {
-      errorMessage.classList.remove('show');
+  }
+  
+  const verified = speakeasy.totp.verify({
+    secret: totpSecret,
+    encoding: 'base32',
+    token: code,
+    window: 6
+  });
+  
+  console.log('Verification result:', verified);
+  console.log('===================');
+  
+  if (verified) {
+    activeSessions.set(sessionId, true);
+    res.json({ 
+      success: true, 
+      user: { name: userInfo.name, avatar: userInfo.avatar } 
     });
-    
-    function initializeApp() {
-      checkSpotifyConnection();
-      loadVideos();
-      loadPopupState();
-      loadState();
-      stateInterval = setInterval(loadState, 1000);
-      popupInterval = setInterval(loadPopupState, 3000);
-      spotifyInterval = setInterval(updateSpotifyStatus, 2000);
+  } else {
+    res.json({ success: false, error: 'Invalid code' });
+  }
+});
+
+// ===== TIMER ROUTES =====
+app.get('/api/state/public', (req, res) => {
+  res.json(userState.timer);
+});
+
+app.get('/api/state', getUserFromSession, (req, res) => {
+  res.json(userState.timer);
+});
+
+app.post('/api/state', getUserFromSession, (req, res) => {
+  const updates = req.body;
+  userState.timer = { ...userState.timer, ...updates };
+  res.json(userState.timer);
+});
+
+app.post('/api/reset', getUserFromSession, (req, res) => {
+  const wasRunning = userState.timer.isRunning && userState.timer.remaining > 0;
+  
+  userState.timer = {
+    duration: 0,
+    remaining: 0,
+    endTime: null,
+    isPaused: false,
+    isRunning: false,
+    wasSkipped: wasRunning,
+    autoExtendTime: null,
+    language: userState.timer.language || 'de'
+  };
+  res.json(userState.timer);
+});
+
+// ===== POP-UP ROUTES =====
+app.get('/api/popup/videos', getUserFromSession, (req, res) => {
+  const popDir = path.join(__dirname, 'public', 'pop');
+  
+  try {
+    if (!fs.existsSync(popDir)) {
+      fs.mkdirSync(popDir, { recursive: true });
+      return res.json({ videos: [] });
     }
     
-    function togglePanel(header, content) {
-      const arrow = header.querySelector('.panel-arrow');
-      const title = header.querySelector('.panel-title');
-      const panel = header.parentElement;
-      const isCollapsed = content.classList.contains('collapsed');
-      
-      if (isCollapsed) {
-        content.classList.remove('collapsed');
-        arrow.classList.remove('collapsed');
-        header.classList.remove('collapsed');
-        panel.classList.remove('collapsed');
-        title.classList.add('hidden');
-      } else {
-        content.classList.add('collapsed');
-        arrow.classList.add('collapsed');
-        header.classList.add('collapsed');
-        panel.classList.add('collapsed');
-        title.classList.remove('hidden');
-      }
+    const files = fs.readdirSync(popDir);
+    const videos = files.filter(file => file.endsWith('.mp4'));
+    
+    res.json({ videos });
+  } catch (err) {
+    res.json({ videos: [], error: err.message });
+  }
+});
+
+app.get('/api/popup/state', getUserFromSession, (req, res) => {
+  res.json(userState.popup);
+});
+
+app.post('/api/popup/state', getUserFromSession, (req, res) => {
+  userState.popup = { ...userState.popup, ...req.body };
+  
+  if (userState.popup.isActive && userState.popup.selectedVideos.length > 0) {
+    startVideoRotation();
+  } else if (!userState.popup.isActive) {
+    userState.popup.currentVideo = null;
+    userState.popup.lastPlayedTime = null;
+  }
+  
+  res.json(userState.popup);
+});
+
+app.get('/api/popup/current', (req, res) => {
+  res.json({ 
+    currentVideo: userState.popup.currentVideo,
+    isActive: userState.popup.isActive
+  });
+});
+
+// ===== SPOTIFY ROUTES =====
+app.get('/spotify/login', getUserFromSession, (req, res) => {
+  const scopes = 'user-read-playback-state user-modify-playback-state user-read-currently-playing';
+  const authUrl = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}`;
+  res.redirect(authUrl);
+});
+
+app.get('/callback', async (req, res) => {
+  const code = req.query.code;
+  
+  if (!code) {
+    return res.send('Error: No code provided');
+  }
+
+  try {
+    const response = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': 'Basic ' + Buffer.from(SPOTIFY_CLIENT_ID + ':' + SPOTIFY_CLIENT_SECRET).toString('base64')
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: REDIRECT_URI
+      })
+    });
+
+    const data = await response.json();
+    userState.spotify.accessToken = data.access_token;
+    userState.spotify.refreshToken = data.refresh_token;
+
+    res.send('<h1>✅ Spotify verbunden!</h1><p>Du kannst dieses Fenster schließen.</p><script>window.close()</script>');
+  } catch (err) {
+    res.send('Error: ' + err.message);
+  }
+});
+
+app.get('/api/spotify/current', getUserFromSession, async (req, res) => {
+  if (!userState.spotify.accessToken) {
+    return res.json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+      headers: { 'Authorization': 'Bearer ' + userState.spotify.accessToken }
+    });
+
+    if (response.status === 204) {
+      return res.json({ isPlaying: false });
     }
-    
-    document.getElementById('spotifyHeader').addEventListener('click', () => {
-      togglePanel(document.getElementById('spotifyHeader'), document.getElementById('spotifyContent'));
+
+    const data = await response.json();
+    userState.spotify.currentTrack = {
+      name: data.item?.name,
+      artist: data.item?.artists[0]?.name,
+      album: data.item?.album?.name,
+      cover: data.item?.album?.images[0]?.url,
+      duration: data.item?.duration_ms,
+      progress: data.progress_ms
+    };
+    userState.spotify.isPlaying = data.is_playing;
+
+    res.json(userState.spotify.currentTrack);
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
+app.get('/api/spotify/current/public', async (req, res) => {
+  if (!userState.spotify.accessToken) {
+    return res.json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+      headers: { 'Authorization': 'Bearer ' + userState.spotify.accessToken }
     });
-    
-    document.getElementById('timerHeader').addEventListener('click', () => {
-      togglePanel(document.getElementById('timerHeader'), document.getElementById('timerContent'));
-    });
-    
-    document.getElementById('popupHeader').addEventListener('click', () => {
-      togglePanel(document.getElementById('popupHeader'), document.getElementById('popupContent'));
-    });
-    
-    document.getElementById('btnGerman').addEventListener('click', async () => {
-      if (!sessionId) return;
-      currentLanguage = 'de';
-      document.getElementById('btnGerman').classList.add('active');
-      document.getElementById('btnEnglish').classList.remove('active');
-      await updateState({ language: 'de' });
-    });
-    
-    document.getElementById('btnEnglish').addEventListener('click', async () => {
-      if (!sessionId) return;
-      currentLanguage = 'en';
-      document.getElementById('btnEnglish').classList.add('active');
-      document.getElementById('btnGerman').classList.remove('active');
-      await updateState({ language: 'en' });
-    });
-    
-    document.getElementById('spotifyConnectBtn').addEventListener('click', () => {
-      window.open(`${API_URL}/spotify/login`, '_blank', 'width=500,height=700');
-      setTimeout(checkSpotifyConnection, 2000);
-    });
-    
-    async function checkSpotifyConnection() {
-      if (!sessionId) return;
-      try {
-        const res = await fetch(`${API_URL}/api/spotify/state`, {
-          headers: getHeaders()
-        });
-        const data = await res.json();
-        
-        if (data.connected) {
-          spotifyConnected = true;
-          document.getElementById('spotifyStatus').classList.add('hidden');
-          document.getElementById('spotifyControls').classList.remove('hidden');
-          document.getElementById('volumeSlider').value = data.volume;
-          document.getElementById('volumeValue').textContent = data.volume;
-        }
-      } catch (err) {
-        console.error('Spotify check error:', err);
-      }
+
+    if (response.status === 204) {
+      return res.json({ isPlaying: false });
     }
-    
-    async function updateSpotifyStatus() {
-      if (!spotifyConnected || !sessionId) return;
-      
-      try {
-        const res = await fetch(`${API_URL}/api/spotify/state`, {
-          headers: getHeaders()
-        });
-        const data = await res.json();
-        
-        const panel = document.getElementById('spotifyPanel');
-        const btn = document.getElementById('playPauseBtn');
-        
-        if (data.isPlaying) {
-          panel.classList.add('playing');
-          btn.classList.remove('paused');
-          btn.classList.add('playing');
-        } else {
-          panel.classList.remove('playing');
-          btn.classList.remove('playing');
-          btn.classList.add('paused');
-        }
-      } catch (err) {
-        console.error('Spotify status error:', err);
-      }
-    }
-    
-    document.getElementById('volumeSlider').addEventListener('input', async (e) => {
-      if (!sessionId) return;
-      const volume = parseInt(e.target.value);
-      document.getElementById('volumeValue').textContent = volume;
-      
-      try {
-        await fetch(`${API_URL}/api/spotify/volume`, {
-          method: 'POST',
-          headers: getHeaders(),
-          body: JSON.stringify({ volume })
-        });
-      } catch (err) {
-        console.error('Volume error:', err);
-      }
+
+    const data = await response.json();
+    userState.spotify.currentTrack = {
+      name: data.item?.name,
+      artist: data.item?.artists[0]?.name,
+      album: data.item?.album?.name,
+      cover: data.item?.album?.images[0]?.url,
+      duration: data.item?.duration_ms,
+      progress: data.progress_ms
+    };
+    userState.spotify.isPlaying = data.is_playing;
+
+    res.json(userState.spotify.currentTrack);
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
+app.post('/api/spotify/playpause', getUserFromSession, async (req, res) => {
+  if (!userState.spotify.accessToken) {
+    return res.json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const endpoint = userState.spotify.isPlaying ? 'pause' : 'play';
+    await fetch(`https://api.spotify.com/v1/me/player/${endpoint}`, {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + userState.spotify.accessToken }
     });
-    
-    document.getElementById('playPauseBtn').addEventListener('click', async () => {
-      if (!sessionId) return;
-      try {
-        await fetch(`${API_URL}/api/spotify/playpause`, {
-          method: 'POST',
-          headers: getHeaders()
-        });
-        setTimeout(updateSpotifyStatus, 200);
-      } catch (err) {
-        console.error('Play/Pause error:', err);
-      }
+
+    userState.spotify.isPlaying = !userState.spotify.isPlaying;
+    res.json({ success: true, isPlaying: userState.spotify.isPlaying });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
+app.post('/api/spotify/skip', getUserFromSession, async (req, res) => {
+  if (!userState.spotify.accessToken) {
+    return res.json({ error: 'Not authenticated' });
+  }
+
+  try {
+    await fetch('https://api.spotify.com/v1/me/player/next', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + userState.spotify.accessToken }
     });
-    
-    document.getElementById('skipBtn').addEventListener('click', async () => {
-      if (!sessionId) return;
-      try {
-        await fetch(`${API_URL}/api/spotify/skip`, {
-          method: 'POST',
-          headers: getHeaders()
-        });
-      } catch (err) {
-        console.error('Skip error:', err);
-      }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
+app.post('/api/spotify/volume', getUserFromSession, async (req, res) => {
+  if (!userState.spotify.accessToken) {
+    return res.json({ error: 'Not authenticated' });
+  }
+
+  const volume = req.body.volume;
+  userState.spotify.volume = volume;
+
+  try {
+    await fetch(`https://api.spotify.com/v1/me/player/volume?volume_percent=${volume}`, {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + userState.spotify.accessToken }
     });
+
+    res.json({ success: true, volume: volume });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
+app.get('/api/spotify/state', getUserFromSession, (req, res) => {
+  res.json({
+    connected: !!userState.spotify.accessToken,
+    volume: userState.spotify.volume,
+    isPlaying: userState.spotify.isPlaying
+  });
+});
+
+// ===== HELPER FUNCTIONS FOR INTERVALS =====
+function startVideoRotation() {
+  const popup = userState.popup;
+  
+  if (!popup.isActive || popup.selectedVideos.length === 0) {
+    return;
+  }
+  
+  const now = Date.now();
+  
+  if (!popup.lastPlayedTime || (now - popup.lastPlayedTime >= VIDEO_INTERVAL)) {
+    const video = popup.selectedVideos[popup.currentVideoIndex];
+    popup.currentVideo = video;
+    popup.lastPlayedTime = now;
     
-    async function loadState() {
-      if (!sessionId || isUpdating) return;
-      try {
-        const res = await fetch(`${API_URL}/api/state`, {
-          headers: getHeaders()
-        });
-        const state = await res.json();
-        
-        updateTimerUI(state);
-        if (state.language) {
-          updateLanguageUI(state.language);
-        }
-      } catch (err) {
-        console.error('Load state error:', err);
-      }
-    }
+    popup.currentVideoIndex = (popup.currentVideoIndex + 1) % popup.selectedVideos.length;
     
-    function updateTimerUI(timer) {
-      const previewTime = document.getElementById('previewTime');
-      const previewEnd = document.getElementById('previewEnd');
-      const timerPanel = document.getElementById('timerPanel');
-      const startBtn = document.getElementById('startBtn');
-      const pauseBtn = document.getElementById('pauseBtn');
-      const resetBtn = document.getElementById('resetBtn');
-      
-      if (timer.isRunning && timer.remaining > 0) {
-        const mins = Math.floor(timer.remaining / 60);
-        const secs = timer.remaining % 60;
-        previewTime.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-        
-        if (timer.endTime) {
-          const endDate = new Date(timer.endTime);
-          previewEnd.textContent = `Resume: ${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')} Uhr`;
-        }
-        
-        timerPanel.classList.add('running');
-        startBtn.classList.add('hidden');
-        pauseBtn.classList.remove('hidden');
-        resetBtn.classList.remove('hidden');
-        
-        if (timer.isPaused) {
-          pauseBtn.textContent = '▶️ Resume';
-        } else {
-          pauseBtn.textContent = '⏸️ Pause';
-        }
-      } else {
-        previewTime.textContent = '00:00';
-        previewEnd.textContent = 'Resume: --:-- Uhr';
-        timerPanel.classList.remove('running');
-        startBtn.classList.remove('hidden');
-        pauseBtn.classList.add('hidden');
-        resetBtn.classList.add('hidden');
-      }
-    }
-    
-    function updateLanguageUI(lang) {
-      if (lang === 'de') {
-        document.getElementById('btnGerman').classList.add('active');
-        document.getElementById('btnEnglish').classList.remove('active');
-      } else {
-        document.getElementById('btnEnglish').classList.add('active');
-        document.getElementById('btnGerman').classList.remove('active');
-      }
-    }
-    
-    async function updateState(data) {
-      if (!sessionId) return;
-      isUpdating = true;
-      try {
-        await fetch(`${API_URL}/api/state`, {
-          method: 'POST',
-          headers: getHeaders(),
-          body: JSON.stringify(data)
-        });
-        isUpdating = false;
-      } catch (err) {
-        console.error('Update state error:', err);
-        isUpdating = false;
-      }
-    }
-    
-    document.getElementById('startBtn').addEventListener('click', async () => {
-      if (!sessionId) return;
-      isUpdating = true;
-      const minutes = parseInt(document.getElementById('timeInput').value) || 5;
-      const seconds = minutes * 60;
-      
-      try {
-        await fetch(`${API_URL}/api/state`, {
-          method: 'POST',
-          headers: getHeaders(),
-          body: JSON.stringify({
-            duration: seconds,
-            remaining: seconds,
-            endTime: Date.now() + (seconds * 1000),
-            isPaused: false,
-            isRunning: true,
-            wasSkipped: false
-          })
-        });
-        isUpdating = false;
-      } catch (err) {
-        console.error('Start timer error:', err);
-        isUpdating = false;
-      }
-    });
-    
-    document.getElementById('pauseBtn').addEventListener('click', async () => {
-      if (!sessionId) return;
-      isUpdating = true;
-      
-      try {
-        const res = await fetch(`${API_URL}/api/state`, {
-          headers: getHeaders()
-        });
-        const currentState = await res.json();
-        
-        await fetch(`${API_URL}/api/state`, {
-          method: 'POST',
-          headers: getHeaders(),
-          body: JSON.stringify({
-            isPaused: !currentState.isPaused
-          })
-        });
-        isUpdating = false;
-      } catch (err) {
-        console.error('Pause timer error:', err);
-        isUpdating = false;
-      }
-    });
-    
-    document.getElementById('resetBtn').addEventListener('click', async () => {
-      if (!sessionId) return;
-      isUpdating = true;
-      
-      try {
-        await fetch(`${API_URL}/api/reset`, {
-          method: 'POST',
-          headers: getHeaders()
-        });
-        isUpdating = false;
-      } catch (err) {
-        console.error('Reset timer error:', err);
-        isUpdating = false;
-      }
-    });
-    
-    async function loadVideos() {
-      if (!sessionId) return;
-      try {
-        const res = await fetch(`${API_URL}/api/popup/videos`, {
-          headers: getHeaders()
-        });
-        const data = await res.json();
-        availableVideos = data.videos || [];
-        renderVideoList();
-      } catch (err) {
-        console.error('Load videos error:', err);
-      }
-    }
-    
-    function renderVideoList() {
-      const videoList = document.getElementById('videoList');
-      
-      if (availableVideos.length === 0) {
-        videoList.innerHTML = '<div class="no-videos">No videos available</div>';
-        return;
-      }
-      
-      videoList.innerHTML = '';
-      availableVideos.forEach(video => {
-        const item = document.createElement('div');
-        item.className = 'video-item';
-        
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'video-checkbox';
-        checkbox.checked = selectedVideos.includes(video);
-        checkbox.addEventListener('change', (e) => {
-          if (e.target.checked) {
-            selectedVideos.push(video);
-          } else {
-            selectedVideos = selectedVideos.filter(v => v !== video);
-          }
-          updatePopupVideos();
-        });
-        
-        const name = document.createElement('span');
-        name.className = 'video-name';
-        name.textContent = video;
-        
-        item.appendChild(checkbox);
-        item.appendChild(name);
-        videoList.appendChild(item);
-      });
-    }
-    
-    async function loadPopupState() {
-      if (!sessionId || isUpdating) return;
-      try {
-        const res = await fetch(`${API_URL}/api/popup/state`, {
-          headers: getHeaders()
-        });
-        const data = await res.json();
-        
-        popupActive = data.isActive || false;
-        selectedVideos = data.selectedVideos || [];
-        
-        const toggle = document.getElementById('popupToggle');
-        const panel = document.getElementById('popupPanel');
-        
-        if (popupActive) {
-          toggle.classList.add('active');
-          panel.classList.add('active');
-        } else {
-          toggle.classList.remove('active');
-          panel.classList.remove('active');
-        }
-        
-        renderVideoList();
-      } catch (err) {
-        console.error('Load popup state error:', err);
-      }
-    }
-    
-    document.getElementById('popupToggle').addEventListener('click', async () => {
-      if (!sessionId) return;
-      isUpdating = true;
-      popupActive = !popupActive;
-      
-      const toggle = document.getElementById('popupToggle');
-      const panel = document.getElementById('popupPanel');
-      
-      if (popupActive) {
-        toggle.classList.add('active');
-        panel.classList.add('active');
-      } else {
-        toggle.classList.remove('active');
-        panel.classList.remove('active');
-      }
-      
-      try {
-        await fetch(`${API_URL}/api/popup/state`, {
-          method: 'POST',
-          headers: getHeaders(),
-          body: JSON.stringify({ 
-            isActive: popupActive,
-            selectedVideos: selectedVideos
-          })
-        });
-        isUpdating = false;
-      } catch (err) {
-        console.error('Toggle popup error:', err);
-        isUpdating = false;
-      }
-    });
-    
-    async function updatePopupVideos() {
-      if (!sessionId) return;
-      isUpdating = true;
-      try {
-        await fetch(`${API_URL}/api/popup/state`, {
-          method: 'POST',
-          headers: getHeaders(),
-          body: JSON.stringify({ 
-            isActive: popupActive,
-            selectedVideos: selectedVideos
-          })
-        });
-        isUpdating = false;
-      } catch (err) {
-        console.error('Update popup videos error:', err);
-        isUpdating = false;
-      }
-    }
-    
-    checkAuthStatus();
-  </script>
-</body>
-</html>
+    console.log(`Playing video: ${video} at ${new Date().toLocaleTimeString()}`);
+  }
+}
+
+// ===== INTERVALS (MUST BE AFTER userState DEFINITION!) =====
+// Timer countdown logic
+setInterval(() => {
+  const timer = userState.timer;
+  
+  if (!timer.isRunning || timer.isPaused || !timer.endTime) {
+    return;
+  }
+  
+  const now = Date.now();
+  const remaining = Math.ceil((timer.endTime - now) / 1000);
+  timer.remaining = Math.max(0, remaining);
+  
+  if (timer.remaining <= 0 && !timer.autoExtendTime) {
+    timer.autoExtendTime = Date.now() + 30000;
+    console.log('Timer ended. Auto-extend in 30 seconds...');
+  }
+  
+  if (timer.autoExtendTime && Date.now() >= timer.autoExtendTime) {
+    const extension = 5 * 60;
+    timer.duration += extension;
+    timer.remaining = extension;
+    timer.endTime = Date.now() + (extension * 1000);
+    timer.autoExtendTime = null;
+    console.log('Timer auto-extended by 5 minutes');
+  }
+}, 1000);
+
+// Video rotation check
+setInterval(() => {
+  if (userState.popup.isActive && userState.popup.selectedVideos.length > 0) {
+    startVideoRotation();
+  }
+}, 60 * 1000);
+
+// ===== SERVER START =====
+app.listen(PORT, () => {
+  const userInfo = getUserInfo();
+  const totpSecret = process.env.TOTP_SECRET;
+  
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Current user: ${userInfo.name}`);
+  console.log(`TOTP_SECRET value: ${totpSecret ? (totpSecret === 'NONE' ? 'NONE (Auth disabled)' : '[SET]') : '[NOT SET - Auth disabled]'}`);
+  console.log(`Auth: ${isAuthEnabled() ? 'ENABLED' : 'DISABLED'}`);
+});
