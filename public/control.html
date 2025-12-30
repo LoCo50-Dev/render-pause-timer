@@ -798,7 +798,7 @@
       loadVideos();
       loadPopupState();
       loadState();
-      stateInterval = setInterval(loadState, 500);
+      stateInterval = setInterval(loadState, 1000); // Changed from 500ms to 1000ms
       popupInterval = setInterval(loadPopupState, 3000);
       spotifyInterval = setInterval(updateSpotifyStatus, 2000);
     }
@@ -1032,18 +1032,17 @@
       const seconds = minutes * 60;
       
       try {
-        const startTime = Date.now();
+        // PLAN B: Add 2 seconds to compensate for skip
         await fetch(`${API_URL}/api/state`, {
           method: 'POST',
           headers: getHeaders(),
           body: JSON.stringify({
-            duration: seconds,
-            remaining: seconds,
-            endTime: startTime + (seconds * 1000),
+            duration: seconds + 2,
+            remaining: seconds + 2,
+            endTime: Date.now() + ((seconds + 2) * 1000),
             isPaused: false,
             isRunning: true,
-            wasSkipped: false,
-            lastUpdateTime: startTime
+            wasSkipped: false
           })
         });
         isUpdating = false;
