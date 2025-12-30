@@ -171,13 +171,28 @@ function calculateRemainingTime() {
 // Public endpoint for countdown display (no auth required)
 app.get('/api/state/public', (req, res) => {
   const timer = { ...userState.timer };
-  timer.remaining = calculateRemainingTime();
+  
+  // Always use calculateRemainingTime for public display
+  // This ensures countdown.html shows accurate time
+  if (timer.isRunning && !timer.isPaused) {
+    timer.remaining = calculateRemainingTime();
+  }
+  
   res.json(timer);
 });
 
 app.get('/api/state', getUserFromSession, (req, res) => {
   const timer = { ...userState.timer };
-  timer.remaining = calculateRemainingTime();
+  
+  // For control panel, only recalculate if timer has been running
+  if (timer.isRunning && !timer.isPaused && timer.lastUpdateTime) {
+    const timeSinceStart = Date.now() - timer.lastUpdateTime;
+    // Only recalculate if more than 500ms passed since start
+    if (timeSinceStart > 500) {
+      timer.remaining = calculateRemainingTime();
+    }
+  }
+  
   res.json(timer);
 });
 
@@ -187,6 +202,8 @@ app.post('/api/state', getUserFromSession, (req, res) => {
   // If starting a new timer, set lastUpdateTime
   if (updates.isRunning && updates.endTime) {
     updates.lastUpdateTime = Date.now();
+    // IMPORTANT: When starting, use the remaining value directly from request
+    // Don't recalculate yet to avoid immediate time loss
   }
   
   // If pausing, save current remaining time
@@ -206,8 +223,18 @@ app.post('/api/state', getUserFromSession, (req, res) => {
   
   userState.timer = { ...userState.timer, ...updates };
   
+  // Return the state WITHOUT recalculating remaining on START
+  // This prevents immediate time loss
   const response = { ...userState.timer };
-  response.remaining = calculateRemainingTime();
+  
+  // Only recalculate if timer has been running for a while
+  if (response.isRunning && !response.isPaused && response.lastUpdateTime) {
+    const timeSinceStart = Date.now() - response.lastUpdateTime;
+    // Only recalculate if more than 500ms passed
+    if (timeSinceStart > 500) {
+      response.remaining = calculateRemainingTime();
+    }
+  }
   
   res.json(response);
 });
