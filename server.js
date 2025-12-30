@@ -172,18 +172,16 @@ function calculateRemainingTime() {
 app.get('/api/state/public', (req, res) => {
   const timer = { ...userState.timer };
   
-  // Only calculate if timer is actually running
+  // Grace period: 2 seconds after start
   if (timer.isRunning && !timer.isPaused && timer.endTime) {
-    // Check grace period
     if (timer.lastUpdateTime) {
       const timeSinceStart = Date.now() - timer.lastUpdateTime;
-      if (timeSinceStart > 500) {
-        // After grace period: calculate
+      if (timeSinceStart > 2000) {
+        // After 2 seconds: calculate
         timer.remaining = calculateRemainingTime();
       }
-      // Within grace period: use stored value
+      // Within 2 seconds: use stored value
     } else {
-      // No lastUpdateTime: calculate
       timer.remaining = calculateRemainingTime();
     }
   }
@@ -194,18 +192,16 @@ app.get('/api/state/public', (req, res) => {
 app.get('/api/state', getUserFromSession, (req, res) => {
   const timer = { ...userState.timer };
   
-  // Only calculate if timer is actually running  
+  // Grace period: 2 seconds after start
   if (timer.isRunning && !timer.isPaused && timer.endTime) {
-    // Check grace period
     if (timer.lastUpdateTime) {
       const timeSinceStart = Date.now() - timer.lastUpdateTime;
-      if (timeSinceStart > 500) {
-        // After grace period: calculate
+      if (timeSinceStart > 2000) {
+        // After 2 seconds: calculate
         timer.remaining = calculateRemainingTime();
       }
-      // Within grace period: use stored value
+      // Within 2 seconds: use stored value
     } else {
-      // No lastUpdateTime: calculate
       timer.remaining = calculateRemainingTime();
     }
   }
@@ -216,16 +212,10 @@ app.get('/api/state', getUserFromSession, (req, res) => {
 app.post('/api/state', getUserFromSession, (req, res) => {
   const updates = req.body;
   
-  // If starting a new timer, DON'T recalculate anything!
+  // If starting a new timer
   if (updates.isRunning && updates.endTime && updates.remaining) {
+    // Set grace period timestamp
     updates.lastUpdateTime = Date.now();
-    
-    // CRITICAL: Merge updates WITHOUT any calculation
-    userState.timer = { ...userState.timer, ...updates };
-    
-    // Return EXACTLY what was sent - no modifications!
-    res.json(userState.timer);
-    return;
   }
   
   // If pausing, save current remaining time
@@ -233,14 +223,14 @@ app.post('/api/state', getUserFromSession, (req, res) => {
     const currentRemaining = calculateRemainingTime();
     updates.remaining = currentRemaining;
     updates.endTime = null;
-    updates.lastUpdateTime = Date.now();
+    updates.lastUpdateTime = null; // Clear grace period
   }
   
   // If resuming, recalculate endTime based on remaining
   if (updates.isPaused !== undefined && updates.isPaused === false && userState.timer.isPaused) {
     const currentRemaining = userState.timer.remaining;
     updates.endTime = Date.now() + (currentRemaining * 1000);
-    updates.lastUpdateTime = Date.now();
+    updates.lastUpdateTime = Date.now(); // Restart grace period
   }
   
   userState.timer = { ...userState.timer, ...updates };
@@ -272,11 +262,11 @@ setInterval(() => {
     return;
   }
   
-  // IMPORTANT: Don't update during grace period!
+  // GRACE PERIOD: Don't update during first 2 seconds!
   if (timer.lastUpdateTime) {
     const timeSinceStart = Date.now() - timer.lastUpdateTime;
-    if (timeSinceStart < 500) {
-      // Still in grace period - don't touch remaining!
+    if (timeSinceStart < 2000) {
+      // Still in grace period - don't touch anything!
       return;
     }
   }
@@ -284,8 +274,8 @@ setInterval(() => {
   // Update remaining time based on endTime
   const newRemaining = calculateRemainingTime();
   
-  // Only update if changed significantly (avoid micro-updates)
-  if (Math.abs(timer.remaining - newRemaining) >= 1) {
+  // Only update if changed
+  if (timer.remaining !== newRemaining) {
     timer.remaining = newRemaining;
   }
   
