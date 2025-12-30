@@ -119,13 +119,16 @@
         currentLang = timer.language || 'de';
         
         if (timer.isRunning && timer.remaining > 0) {
+          // Timer is running - show countdown
           const mins = Math.floor(timer.remaining / 60);
           const secs = timer.remaining % 60;
           timeEl.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
           
+          // Progress bar
           const percent = (timer.remaining / timer.duration) * 100;
           barEl.style.width = `${percent}%`;
           
+          // End time
           if (timer.endTime) {
             const endDate = new Date(timer.endTime);
             const hours = endDate.getHours().toString().padStart(2, '0');
@@ -137,6 +140,7 @@
           
           skippedEl.classList.add('hidden');
         } else {
+          // Timer stopped
           timeEl.textContent = '00:00';
           barEl.style.width = '0%';
           endEl.textContent = '--:--';
@@ -153,6 +157,7 @@
       }
     }
     
+    // Update every 100ms for smooth OBS display
     setInterval(updateCountdown, 100);
     updateCountdown();
   </script>
