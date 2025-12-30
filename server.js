@@ -172,10 +172,20 @@ function calculateRemainingTime() {
 app.get('/api/state/public', (req, res) => {
   const timer = { ...userState.timer };
   
-  // Always use calculateRemainingTime for public display
-  // This ensures countdown.html shows accurate time
-  if (timer.isRunning && !timer.isPaused) {
-    timer.remaining = calculateRemainingTime();
+  // Only calculate if timer is actually running
+  if (timer.isRunning && !timer.isPaused && timer.endTime) {
+    // Check grace period
+    if (timer.lastUpdateTime) {
+      const timeSinceStart = Date.now() - timer.lastUpdateTime;
+      if (timeSinceStart > 500) {
+        // After grace period: calculate
+        timer.remaining = calculateRemainingTime();
+      }
+      // Within grace period: use stored value
+    } else {
+      // No lastUpdateTime: calculate
+      timer.remaining = calculateRemainingTime();
+    }
   }
   
   res.json(timer);
@@ -184,11 +194,18 @@ app.get('/api/state/public', (req, res) => {
 app.get('/api/state', getUserFromSession, (req, res) => {
   const timer = { ...userState.timer };
   
-  // For control panel, only recalculate if timer has been running
-  if (timer.isRunning && !timer.isPaused && timer.lastUpdateTime) {
-    const timeSinceStart = Date.now() - timer.lastUpdateTime;
-    // Only recalculate if more than 500ms passed since start
-    if (timeSinceStart > 500) {
+  // Only calculate if timer is actually running  
+  if (timer.isRunning && !timer.isPaused && timer.endTime) {
+    // Check grace period
+    if (timer.lastUpdateTime) {
+      const timeSinceStart = Date.now() - timer.lastUpdateTime;
+      if (timeSinceStart > 500) {
+        // After grace period: calculate
+        timer.remaining = calculateRemainingTime();
+      }
+      // Within grace period: use stored value
+    } else {
+      // No lastUpdateTime: calculate
       timer.remaining = calculateRemainingTime();
     }
   }
@@ -199,18 +216,23 @@ app.get('/api/state', getUserFromSession, (req, res) => {
 app.post('/api/state', getUserFromSession, (req, res) => {
   const updates = req.body;
   
-  // If starting a new timer, set lastUpdateTime
-  if (updates.isRunning && updates.endTime) {
+  // If starting a new timer, DON'T recalculate anything!
+  if (updates.isRunning && updates.endTime && updates.remaining) {
     updates.lastUpdateTime = Date.now();
-    // IMPORTANT: When starting, use the remaining value directly from request
-    // Don't recalculate yet to avoid immediate time loss
+    
+    // CRITICAL: Merge updates WITHOUT any calculation
+    userState.timer = { ...userState.timer, ...updates };
+    
+    // Return EXACTLY what was sent - no modifications!
+    res.json(userState.timer);
+    return;
   }
   
   // If pausing, save current remaining time
   if (updates.isPaused !== undefined && updates.isPaused === true) {
     const currentRemaining = calculateRemainingTime();
     updates.remaining = currentRemaining;
-    updates.endTime = null; // Clear endTime when paused
+    updates.endTime = null;
     updates.lastUpdateTime = Date.now();
   }
   
@@ -222,21 +244,7 @@ app.post('/api/state', getUserFromSession, (req, res) => {
   }
   
   userState.timer = { ...userState.timer, ...updates };
-  
-  // Return the state WITHOUT recalculating remaining on START
-  // This prevents immediate time loss
-  const response = { ...userState.timer };
-  
-  // Only recalculate if timer has been running for a while
-  if (response.isRunning && !response.isPaused && response.lastUpdateTime) {
-    const timeSinceStart = Date.now() - response.lastUpdateTime;
-    // Only recalculate if more than 500ms passed
-    if (timeSinceStart > 500) {
-      response.remaining = calculateRemainingTime();
-    }
-  }
-  
-  res.json(response);
+  res.json(userState.timer);
 });
 
 app.post('/api/reset', getUserFromSession, (req, res) => {
@@ -262,6 +270,15 @@ setInterval(() => {
   
   if (!timer.isRunning || timer.isPaused) {
     return;
+  }
+  
+  // IMPORTANT: Don't update during grace period!
+  if (timer.lastUpdateTime) {
+    const timeSinceStart = Date.now() - timer.lastUpdateTime;
+    if (timeSinceStart < 500) {
+      // Still in grace period - don't touch remaining!
+      return;
+    }
   }
   
   // Update remaining time based on endTime
