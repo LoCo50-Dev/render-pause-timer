@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Now Playing</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      background: transparent;
+      font-family: Arial, sans-serif;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .now-playing {
+      background: rgba(26, 26, 26, 0.95);
+      border-radius: 20px;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      max-width: 500px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    
+    .now-playing.visible {
+      opacity: 1;
+    }
+    
+    .album-cover {
+      width: 100px;
+      height: 100px;
+      border-radius: 12px;
+      background: #1a1a1a;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    
+    .album-cover img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    
+    .track-info {
+      flex: 1;
+      min-width: 0;
+    }
+    
+    .track-name {
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .artist-name {
+      font-size: 16px;
+      opacity: 0.8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .spotify-logo {
+      font-size: 12px;
+      opacity: 0.5;
+      margin-top: 8px;
+    }
+    
+    .error-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.9);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+    
+    .error-box {
+      background: #2a2a2a;
+      border: 2px solid #f44336;
+      border-radius: 15px;
+      padding: 30px;
+      max-width: 400px;
+      text-align: center;
+    }
+    
+    .error-box h2 {
+      color: #f44336;
+      margin-bottom: 15px;
+      font-size: 24px;
+    }
+    
+    .error-box p {
+      opacity: 0.8;
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+    
+    .error-box .error-icon {
+      font-size: 48px;
+      margin-bottom: 15px;
+    }
+    
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <!-- Error Overlay (shown if Spotify module not available) -->
+  <div class="error-overlay hidden" id="errorOverlay">
+    <div class="error-box">
+      <div class="error-icon">⚠️</div>
+      <h2>Spotify Module Required</h2>
+      <p>This overlay requires the Spotify module to be available.</p>
+      <p>Make sure <strong>spotify.html</strong> is in the <strong>/public/modules/</strong> folder.</p>
+    </div>
+  </div>
+
+  <!-- Now Playing Display -->
+  <div class="now-playing" id="nowPlaying">
+    <div class="album-cover" id="albumCover">
+      <img src="" alt="Album Cover" id="coverImage">
+    </div>
+    <div class="track-info">
+      <div class="track-name" id="trackName">Kein Song aktiv</div>
+      <div class="artist-name" id="artistName">Starte Musik in Spotify</div>
+      <div class="spotify-logo">🎵 Spotify</div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = window.location.origin;
+    
+    const errorOverlay = document.getElementById('errorOverlay');
+    const nowPlaying = document.getElementById('nowPlaying');
+    const coverImage = document.getElementById('coverImage');
+    const trackName = document.getElementById('trackName');
+    const artistName = document.getElementById('artistName');
+    
+    let lastTrack = null;
+    let spotifyModuleAvailable = false;
+    let checkAttempts = 0;
+    const MAX_CHECK_ATTEMPTS = 3;
+    
+    // Check if Spotify module exists
+    async function checkSpotifyModule() {
+      try {
+        const res = await fetch(`${API_URL}/api/modules/list`);
+        const data = await res.json();
+        
+        spotifyModuleAvailable = data.modules.some(m => m.id === 'spotify');
+        
+        if (!spotifyModuleAvailable) {
+          console.error('[MUSIC VISUALIZER] Spotify module not found');
+          showError();
+        } else {
+          console.log('[MUSIC VISUALIZER] Spotify module detected');
+          hideError();
+          startPolling();
+        }
+      } catch (err) {
+        console.error('[MUSIC VISUALIZER] Error checking modules:', err);
+        checkAttempts++;
+        
+        if (checkAttempts >= MAX_CHECK_ATTEMPTS) {
+          showError();
+        } else {
+          // Retry after 2 seconds
+          setTimeout(checkSpotifyModule, 2000);
+        }
+      }
+    }
+    
+    function showError() {
+      errorOverlay.classList.remove('hidden');
+      nowPlaying.classList.remove('visible');
+    }
+    
+    function hideError() {
+      errorOverlay.classList.add('hidden');
+    }
+    
+    // Update now playing info
+    async function updateNowPlaying() {
+      if (!spotifyModuleAvailable) return;
+      
+      try {
+        // Try to get current track from Spotify API
+        // Note: This would need a public endpoint or different approach
+        // For now, we'll just show a placeholder
+        
+        // In a real implementation, you'd need to add a public endpoint
+        // like /api/spotify/current/public that doesn't require auth
+        
+        const res = await fetch(`${API_URL}/api/spotify/state`);
+        
+        if (res.status === 401) {
+          // Not authenticated - show default message
+          nowPlaying.classList.remove('visible');
+          return;
+        }
+        
+        const data = await res.json();
+        
+        if (data.error || !data.connected) {
+          nowPlaying.classList.remove('visible');
+          return;
+        }
+        
+        // If we have track data, show it
+        // This part needs to be implemented based on your Spotify API setup
+        // For now, just show that Spotify is connected
+        
+        nowPlaying.classList.add('visible');
+        
+      } catch (err) {
+        console.error('[MUSIC VISUALIZER] Error fetching track:', err);
+        nowPlaying.classList.remove('visible');
+      }
+    }
+    
+    function startPolling() {
+      updateNowPlaying();
+      setInterval(updateNowPlaying, 2000);
+    }
+    
+    // Initialize
+    checkSpotifyModule();
+  </script>
+</body>
+</html>
