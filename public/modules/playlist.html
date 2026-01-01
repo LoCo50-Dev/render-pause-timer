@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playlist Control</title>
+  
+  <!-- ==========================================
+       MODULE CONFIGURATION
+       ========================================== -->
+  <script type="application/json" id="module-config">
+  {
+    "id": "playlist",
+    "name": "Playlist",
+    "priority": 4,
+    "borderColor": "#4a1a5c",
+    "activeColor": "#9C27B0",
+    "hasControllerUI": true,
+    "hasOverlay": true,
+    "overlayUrl": "/modules/playlist.html",
+    "dependencies": [],
+    "musicModule": true
+  }
+  </script>
+  
+  <!-- ==========================================
+       SERVER MODULE CODE
+       ========================================== -->
+  <script type="text/x-server-module">
+// Initialize playlist state
+if (!moduleStates.playlist) {
+  moduleStates.playlist = {
+    songs: [],
+    currentIndex: 0,
+    isPlaying: false,
+    volume: 50,
+    isShuffled: false,
+    shuffledIndices: [],
+    crossfadeActive: false
+  };
+}
+
+const playlistState = moduleStates.playlist;
+
+// Load songs from /music/ folder
+function loadSongs() {
+  const musicDir = path.join(__dirname, 'public', 'music');
+  
+  if (!fs.existsSync(musicDir)) {
+    fs.mkdirSync(musicDir, { recursive: true });
+    console.log('[PLAYLIST] Created /music/ folder');
+    return [];
+  }
+  
+  const files = fs.readdirSync(musicDir);
+  const songs = files.filter(f => f.endsWith('.mp3') || f.endsWith('.wav') || f.endsWith('.ogg'));
+  
+  console.log(`[PLAYLIST] Found ${songs.length} songs`);
+  return songs;
+}
+
+// Generate shuffled indices
+function generateShuffledIndices(length) {
+  const indices = Array.from({ length }, (_, i) => i);
+  
+  // Fisher-Yates shuffle
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  
+  return indices;
+}
+
+// Routes
+app.get('/api/playlist/songs', getUserFromSession, (req, res) => {
+  playlistState.songs = loadSongs();
+  res.json({ songs: playlistState.songs });
+});
+
+app.get('/api/playlist/state', getUserFromSession, (req, res) => {
+  res.json({
+    currentIndex: playlistState.currentIndex,
+    currentSong: playlistState.songs[playlistState.currentIndex] || null,
+    isPlaying: playlistState.isPlaying,
+    volume: playlistState.volume,
+    isShuffled: playlistState.isShuffled,
+    totalSongs: playlistState.songs.length
+  });
+});
+
+app.get('/api/playlist/public', (req, res) => {
+  res.json({
+    currentIndex: playlistState.currentIndex,
+    currentSong: playlistState.songs[playlistState.currentIndex] || null,
+    isPlaying: playlistState.isPlaying,
+    volume: playlistState.volume,
+    totalSongs: playlistState.songs.length
+  });
+});
+
+app.post('/api/playlist/playpause', getUserFromSession, (req, res) => {
+  playlistState.isPlaying = !playlistState.isPlaying;
+  console.log(`[PLAYLIST] ${playlistState.isPlaying ? 'Playing' : 'Paused'}`);
+  res.json({ isPlaying: playlistState.isPlaying });
+});
+
+app.post('/api/playlist/skip', getUserFromSession, (req, res) => {
+  if (playlistState.isShuffled) {
+    const currentShufflePos = playlistState.shuffledIndices.indexOf(playlistState.currentIndex);
+    const nextShufflePos = (currentShufflePos + 1) % playlistState.shuffledIndices.length;
+    playlistState.currentIndex = playlistState.shuffledIndices[nextShufflePos];
+  } else {
+    playlistState.currentIndex = (playlistState.currentIndex + 1) % playlistState.songs.length;
+  }
+  
+  console.log(`[PLAYLIST] Skipped to: ${playlistState.songs[playlistState.currentIndex]}`);
+  res.json({ 
+    currentIndex: playlistState.currentIndex,
+    currentSong: playlistState.songs[playlistState.currentIndex]
+  });
+});
+
+app.post('/api/playlist/volume', getUserFromSession, (req, res) => {
+  const { volume } = req.body;
+  playlistState.volume = Math.max(0, Math.min(100, volume));
+  console.log(`[PLAYLIST] Volume: ${playlistState.volume}%`);
+  res.json({ volume: playlistState.volume });
+});
+
+app.post('/api/playlist/shuffle', getUserFromSession, (req, res) => {
+  playlistState.isShuffled = !playlistState.isShuffled;
+  
+  if (playlistState.isShuffled) {
+    playlistState.shuffledIndices = generateShuffledIndices(playlistState.songs.length);
+    console.log('[PLAYLIST] Shuffle ON - New random order created');
+  } else {
+    playlistState.shuffledIndices = [];
+    console.log('[PLAYLIST] Shuffle OFF - Sequential order');
+  }
+  
+  res.json({ isShuffled: playlistState.isShuffled });
+});
+
+app.post('/api/playlist/next-song', (req, res) => {
+  if (playlistState.isShuffled) {
+    const currentShufflePos = playlistState.shuffledIndices.indexOf(playlistState.currentIndex);
+    const nextShufflePos = (currentShufflePos + 1) % playlistState.shuffledIndices.length;
+    playlistState.currentIndex = playlistState.shuffledIndices[nextShufflePos];
+  } else {
+    playlistState.currentIndex = (playlistState.currentIndex + 1) % playlistState.songs.length;
+  }
+  
+  console.log(`[PLAYLIST] Auto-advanced to: ${playlistState.songs[playlistState.currentIndex]}`);
+  res.json({ 
+    currentIndex: playlistState.currentIndex,
+    currentSong: playlistState.songs[playlistState.currentIndex]
+  });
+});
+
+// Initialize songs on startup
+playlistState.songs = loadSongs();
+  </script>
+  
+  <!-- ==========================================
+       CONTROLLER MODULE CODE
+       ========================================== -->
+  <script type="text/x-controller-module">
+let playlistInterval = null;
+
+// Render UI
+container.innerHTML = `
+  <style>
+    .playlist-controls {
+      background: #1a1a1a;
+      padding: 15px;
+      border-radius: 10px;
+    }
+    
+    .playlist-volume-control {
+      margin-bottom: 15px;
+    }
+    
+    .playlist-volume-control label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+      text-align: center;
+    }
+    
+    .playlist-slider {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: #3a3a3a;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    
+    .playlist-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #9C27B0;
+      cursor: pointer;
+    }
+    
+    .playlist-slider::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #9C27B0;
+      cursor: pointer;
+      border: none;
+    }
+    
+    .playlist-now-playing {
+      text-align: center;
+      margin-bottom: 15px;
+      padding: 10px;
+      background: #2a2a2a;
+      border-radius: 8px;
+    }
+    
+    .playlist-now-playing-label {
+      font-size: 12px;
+      opacity: 0.7;
+      margin-bottom: 5px;
+    }
+    
+    .playlist-now-playing-song {
+      font-size: 14px;
+      font-weight: bold;
+      color: #9C27B0;
+    }
+    
+    .playlist-music-buttons {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .playlist-btn-music {
+      flex: 1;
+      padding: 15px;
+      border: none;
+      border-radius: 8px;
+      font-size: 20px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .playlist-btn-pause {
+      background: #555;
+    }
+    
+    .playlist-btn-pause.paused {
+      background: #444;
+      opacity: 0.7;
+    }
+    
+    .playlist-btn-pause.playing {
+      background: #9C27B0;
+      animation: playlist-pulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes playlist-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    
+    .playlist-btn-shuffle {
+      background: #555;
+    }
+    
+    .playlist-btn-shuffle.active {
+      background: #4CAF50;
+      animation: playlist-pulse 2s ease-in-out infinite;
+    }
+    
+    .playlist-btn-skip {
+      background: #FF9800;
+    }
+    
+    .playlist-btn-skip:hover {
+      background: #e68900;
+    }
+    
+    .hidden {
+      display: none !important;
+    }
+  </style>
+  
+  <div class="playlist-controls">
+    <div class="playlist-now-playing">
+      <div class="playlist-now-playing-label">Now Playing:</div>
+      <div class="playlist-now-playing-song" id="playlist-now-playing">No song loaded</div>
+    </div>
+    
+    <div class="playlist-volume-control">
+      <label>🔊 Volume: <span id="playlist-volume-value">50</span>%</label>
+      <input type="range" id="playlist-volume-slider" min="0" max="100" value="50" class="playlist-slider">
+    </div>
+    
+    <div class="playlist-music-buttons">
+      <button class="playlist-btn-music playlist-btn-pause paused" id="playlist-play-pause-btn">❚❚</button>
+      <button class="playlist-btn-music playlist-btn-shuffle" id="playlist-shuffle-btn">🔀</button>
+      <button class="playlist-btn-music playlist-btn-skip" id="playlist-skip-btn">⏭</button>
+    </div>
+  </div>
+`;
+
+const volumeSlider = document.getElementById('playlist-volume-slider');
+const volumeValue = document.getElementById('playlist-volume-value');
+const playPauseBtn = document.getElementById('playlist-play-pause-btn');
+const shuffleBtn = document.getElementById('playlist-shuffle-btn');
+const skipBtn = document.getElementById('playlist-skip-btn');
+const nowPlaying = document.getElementById('playlist-now-playing');
+
+// Load songs
+async function loadSongs() {
+  try {
+    const res = await fetch(`${apiUrl}/api/playlist/songs`, { headers: getHeaders() });
+    const data = await res.json();
+    console.log(`[PLAYLIST] Loaded ${data.songs.length} songs`);
+  } catch (err) {
+    console.error('[PLAYLIST] Load songs error:', err);
+  }
+}
+
+// Update playlist status
+async function updatePlaylistStatus() {
+  try {
+    const res = await fetch(`${apiUrl}/api/playlist/state`, { headers: getHeaders() });
+    const data = await res.json();
+    
+    if (data.currentSong) {
+      nowPlaying.textContent = data.currentSong.replace(/\.(mp3|wav|ogg)$/i, '');
+    } else {
+      nowPlaying.textContent = 'No song loaded';
+    }
+    
+    if (data.isPlaying) {
+      panel.style.borderColor = moduleConfig.activeColor;
+      playPauseBtn.classList.remove('paused');
+      playPauseBtn.classList.add('playing');
+      playPauseBtn.textContent = '❚❚';
+    } else {
+      panel.style.borderColor = moduleConfig.borderColor;
+      playPauseBtn.classList.remove('playing');
+      playPauseBtn.classList.add('paused');
+      playPauseBtn.textContent = '▶︎';
+    }
+    
+    if (data.isShuffled) {
+      shuffleBtn.classList.add('active');
+    } else {
+      shuffleBtn.classList.remove('active');
+    }
+  } catch (err) {
+    console.error('[PLAYLIST] Status error:', err);
+  }
+}
+
+// Event listeners
+volumeSlider.addEventListener('input', async (e) => {
+  const volume = parseInt(e.target.value);
+  volumeValue.textContent = volume;
+  
+  try {
+    await fetch(`${apiUrl}/api/playlist/volume`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ volume })
+    });
+  } catch (err) {
+    console.error('[PLAYLIST] Volume error:', err);
+  }
+});
+
+playPauseBtn.addEventListener('click', async () => {
+  try {
+    await fetch(`${apiUrl}/api/playlist/playpause`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+    setTimeout(updatePlaylistStatus, 200);
+  } catch (err) {
+    console.error('[PLAYLIST] Play/Pause error:', err);
+  }
+});
+
+shuffleBtn.addEventListener('click', async () => {
+  try {
+    await fetch(`${apiUrl}/api/playlist/shuffle`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+    setTimeout(updatePlaylistStatus, 200);
+  } catch (err) {
+    console.error('[PLAYLIST] Shuffle error:', err);
+  }
+});
+
+skipBtn.addEventListener('click', async () => {
+  try {
+    await fetch(`${apiUrl}/api/playlist/skip`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+    setTimeout(updatePlaylistStatus, 200);
+  } catch (err) {
+    console.error('[PLAYLIST] Skip error:', err);
+  }
+});
+
+// Initialize
+loadSongs();
+updatePlaylistStatus();
+playlistInterval = setInterval(updatePlaylistStatus, 2000);
+
+// Return module instance
+return {
+  destroy: function() {
+    if (playlistInterval) {
+      clearInterval(playlistInterval);
+    }
+  }
+};
+  </script>
+  
+  <!-- ==========================================
+       OBS OVERLAY STYLES
+       ========================================== -->
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      background: transparent;
+      overflow: hidden;
+    }
+    
+    #audio-player {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- ==========================================
+       OBS OVERLAY HTML
+       ========================================== -->
+  <audio id="audio-player" preload="auto"></audio>
+  <audio id="audio-player-next" preload="auto"></audio>
+
+  <!-- ==========================================
+       OBS OVERLAY SCRIPT
+       ========================================== -->
+  <script>
+    const API_URL = window.location.origin;
+    const audioPlayer = document.getElementById('audio-player');
+    const audioPlayerNext = document.getElementById('audio-player-next');
+    
+    let currentSong = null;
+    let nextSong = null;
+    let currentVolume = 50;
+    let crossfadeStarted = false;
+    let isPlaying = false;
+    
+    const CROSSFADE_TIME = 5; // seconds before end to start crossfade
+    
+    async function updatePlaylist() {
+      try {
+        const res = await fetch(`${API_URL}/api/playlist/public`);
+        const data = await res.json();
+        
+        // Update volume
+        if (data.volume !== currentVolume) {
+          currentVolume = data.volume;
+          audioPlayer.volume = currentVolume / 100;
+          audioPlayerNext.volume = 0;
+        }
+        
+        // Update playing state
+        if (data.isPlaying !== isPlaying) {
+          isPlaying = data.isPlaying;
+          
+          if (isPlaying) {
+            audioPlayer.play().catch(e => console.error('[PLAYLIST] Play error:', e));
+          } else {
+            audioPlayer.pause();
+            audioPlayerNext.pause();
+          }
+        }
+        
+        // Update current song
+        if (data.currentSong && data.currentSong !== currentSong) {
+          currentSong = data.currentSong;
+          audioPlayer.src = `/music/${currentSong}`;
+          audioPlayer.volume = currentVolume / 100;
+          crossfadeStarted = false;
+          
+          if (isPlaying) {
+            audioPlayer.play().catch(e => console.error('[PLAYLIST] Play error:', e));
+          }
+          
+          console.log('[PLAYLIST] Now playing:', currentSong);
+        }
+      } catch (err) {
+        console.error('[PLAYLIST] Update error:', err);
+      }
+    }
+    
+    // Crossfade logic
+    audioPlayer.addEventListener('timeupdate', async () => {
+      if (!isPlaying) return;
+      
+      const timeLeft = audioPlayer.duration - audioPlayer.currentTime;
+      
+      // Start crossfade 5 seconds before end
+      if (timeLeft <= CROSSFADE_TIME && timeLeft > 0 && !crossfadeStarted) {
+        crossfadeStarted = true;
+        
+        try {
+          // Request next song
+          const res = await fetch(`${API_URL}/api/playlist/next-song`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          const data = await res.json();
+          
+          if (data.currentSong) {
+            nextSong = data.currentSong;
+            audioPlayerNext.src = `/music/${nextSong}`;
+            audioPlayerNext.volume = 0;
+            audioPlayerNext.currentTime = 0;
+            
+            // Start next song
+            audioPlayerNext.play().catch(e => console.error('[PLAYLIST] Next play error:', e));
+            
+            console.log('[PLAYLIST] Crossfade started to:', nextSong);
+            
+            // Fade out current, fade in next
+            const fadeInterval = setInterval(() => {
+              const progress = 1 - ((audioPlayer.duration - audioPlayer.currentTime) / CROSSFADE_TIME);
+              
+              audioPlayer.volume = Math.max(0, (currentVolume / 100) * (1 - progress));
+              audioPlayerNext.volume = Math.min(currentVolume / 100, (currentVolume / 100) * progress);
+              
+              if (progress >= 1) {
+                clearInterval(fadeInterval);
+              }
+            }, 100);
+          }
+        } catch (err) {
+          console.error('[PLAYLIST] Crossfade error:', err);
+        }
+      }
+    });
+    
+    // When current song ends, switch to next
+    audioPlayer.addEventListener('ended', () => {
+      if (nextSong) {
+        currentSong = nextSong;
+        nextSong = null;
+        
+        // Swap players
+        const tempSrc = audioPlayer.src;
+        audioPlayer.src = audioPlayerNext.src;
+        audioPlayerNext.src = '';
+        
+        audioPlayer.volume = currentVolume / 100;
+        audioPlayer.currentTime = audioPlayerNext.currentTime;
+        
+        if (isPlaying) {
+          audioPlayer.play().catch(e => console.error('[PLAYLIST] Play error:', e));
+        }
+        
+        crossfadeStarted = false;
+        
+        console.log('[PLAYLIST] Switched to next song');
+      } else {
+        // No crossfade happened, just go to next song
+        fetch(`${API_URL}/api/playlist/next-song`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        }).then(() => {
+          updatePlaylist();
+        }).catch(err => console.error('[PLAYLIST] Next song error:', err));
+      }
+    });
+    
+    // Start polling
+    setInterval(updatePlaylist, 1000);
+    updatePlaylist();
+  </script>
+</body>
+</html>
