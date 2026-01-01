@@ -74,8 +74,13 @@ app.post('/api/auth/verify', (req, res) => {
   });
   
   if (verified) {
-    const userFiles = fs.readdirSync(path.join(__dirname, 'public', 'user'))
-      .filter(f => f.endsWith('.png'));
+    const userDir = path.join(__dirname, 'public', 'user');
+    
+    if (!fs.existsSync(userDir)) {
+      fs.mkdirSync(userDir, { recursive: true });
+    }
+    
+    const userFiles = fs.readdirSync(userDir).filter(f => f.endsWith('.png'));
     
     const avatarFile = userFiles.length > 0 ? userFiles[0] : 'none.png';
     const userName = avatarFile.replace('.png', '');
@@ -97,18 +102,35 @@ app.post('/api/auth/verify', (req, res) => {
 const loadedModules = [];
 
 function loadModulesFromHTML() {
-  const publicDir = path.join(__dirname, 'public');
-  const files = fs.readdirSync(publicDir).filter(f => f.endsWith('.html'));
+  const modulesDir = path.join(__dirname, 'public', 'modules');
+  
+  // Create modules folder if it doesn't exist
+  if (!fs.existsSync(modulesDir)) {
+    console.log('[MODULE LOADER] Creating modules folder...');
+    fs.mkdirSync(modulesDir, { recursive: true });
+    console.log('[MODULE LOADER] No modules found in /public/modules/');
+    return;
+  }
+  
+  const files = fs.readdirSync(modulesDir).filter(f => f.endsWith('.html'));
+  
+  if (files.length === 0) {
+    console.log('[MODULE LOADER] No HTML files found in /public/modules/');
+    return;
+  }
   
   console.log('[MODULE LOADER] Scanning for modules...');
   
   files.forEach(file => {
-    const filePath = path.join(publicDir, file);
+    const filePath = path.join(modulesDir, file);
     const content = fs.readFileSync(filePath, 'utf-8');
     
     // Extract module config
     const configMatch = content.match(/<script type="application\/json" id="module-config">\s*([\s\S]*?)\s*<\/script>/);
-    if (!configMatch) return;
+    if (!configMatch) {
+      console.log(`[MODULE LOADER] ⚠️  ${file} - No module-config found (might be overlay-only)`);
+      return;
+    }
     
     try {
       const config = JSON.parse(configMatch[1]);
@@ -127,6 +149,8 @@ function loadModulesFromHTML() {
         
         loadedModules.push(module);
         console.log(`[MODULE LOADER] ✅ Loaded: ${config.name} (Priority: ${config.priority})`);
+      } else {
+        console.log(`[MODULE LOADER] ⚠️  ${file} - Has config but no server code`);
       }
     } catch (err) {
       console.error(`[MODULE LOADER] ❌ Error loading ${file}:`, err.message);
@@ -192,8 +216,9 @@ app.get('/api/modules/list', (req, res) => {
     priority: m.config.priority,
     borderColor: m.config.borderColor,
     activeColor: m.config.activeColor,
+    hasControllerUI: m.config.hasControllerUI !== false, // default true
     hasOverlay: m.config.hasOverlay || false,
-    overlayUrl: m.config.overlayUrl || null,
+    overlayUrl: m.config.overlayUrl || `/modules/${m.file}`,
     dependencies: m.config.dependencies || [],
     file: m.file
   }));
@@ -209,8 +234,8 @@ app.get('/api/modules/:moduleId', (req, res) => {
     return res.status(404).json({ error: 'Module not found' });
   }
   
-  // Read HTML file and extract controller code
-  const filePath = path.join(__dirname, 'public', module.file);
+  // Read HTML file from modules folder and extract controller code
+  const filePath = path.join(__dirname, 'public', 'modules', module.file);
   const content = fs.readFileSync(filePath, 'utf-8');
   
   const controllerMatch = content.match(/<script type="text\/x-controller-module">\s*([\s\S]*?)\s*<\/script>/);
@@ -234,10 +259,25 @@ registerModuleRoutes();
 // ============================================
 
 app.listen(PORT, () => {
-  console.log(`🚀 StreamDesk V13 Modular running on port ${PORT}`);
+  console.log('');
+  console.log('========================================');
+  console.log('🚀 StreamDesk V13 Modular');
+  console.log('========================================');
+  console.log(`📡 Port: ${PORT}`);
   console.log(`🔐 Auth: ${AUTH_REQUIRED ? 'ENABLED' : 'DISABLED'}`);
-  console.log(`📦 Modules loaded: ${loadedModules.length}`);
-  loadedModules.forEach(m => {
-    console.log(`   - ${m.config.name} (${m.id}) - Priority ${m.priority}`);
-  });
+  console.log(`📦 Modules: ${loadedModules.length}`);
+  
+  if (loadedModules.length > 0) {
+    console.log('');
+    console.log('Loaded Modules:');
+    loadedModules.forEach(m => {
+      console.log(`   ${m.priority}. ${m.config.name} (${m.id})`);
+    });
+  }
+  
+  console.log('');
+  console.log('📁 Module Folder: /public/modules/');
+  console.log('🌐 Controller: /controller.html');
+  console.log('========================================');
+  console.log('');
 });
