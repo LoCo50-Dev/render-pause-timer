@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Playlist Control</title>
+  <title>Music Control</title>
   
   <!-- ==========================================
        MODULE CONFIGURATION
@@ -11,7 +11,7 @@
   <script type="application/json" id="module-config">
   {
     "id": "playlist",
-    "name": "Playlist",
+    "name": "Music",
     "priority": 3,
     "borderColor": "#0d5c1f",
     "activeColor": "#1DB954",
@@ -34,6 +34,9 @@ if (!moduleStates.playlist) {
     isPlaying: false,
     volume: 50,
     previousVolume: 50,
+    targetVolume: 50,
+    fadeStartTime: null,
+    fadeDirection: null,
     isShuffled: false,
     shuffledIndices: [],
     currentSongMetadata: null
@@ -41,6 +44,31 @@ if (!moduleStates.playlist) {
 }
 
 const playlistState = moduleStates.playlist;
+
+// Fade duration in milliseconds
+const FADE_DURATION = 2000;
+
+// Volume fade interpolation
+function getCurrentVolume() {
+  if (!playlistState.fadeStartTime) {
+    return playlistState.volume;
+  }
+  
+  const elapsed = Date.now() - playlistState.fadeStartTime;
+  if (elapsed >= FADE_DURATION) {
+    playlistState.volume = playlistState.targetVolume;
+    playlistState.fadeStartTime = null;
+    playlistState.fadeDirection = null;
+    return playlistState.volume;
+  }
+  
+  const progress = elapsed / FADE_DURATION;
+  const start = playlistState.previousVolume;
+  const end = playlistState.targetVolume;
+  
+  playlistState.volume = Math.round(start + (end - start) * progress);
+  return playlistState.volume;
+}
 
 // Load songs from /public/music/ folder
 function loadSongs() {
@@ -86,12 +114,11 @@ function extractMetadata(filename) {
     const artist = parts[0].trim();
     const title = parts.slice(1).join(' - ').trim();
     
-    // Check for cover image (same name as song file but .jpg or .png)
+    // Check for cover image
     const musicDir = path.join(__dirname, 'public', 'music');
     const baseName = filename.replace(/\.(mp3|wav|ogg)$/i, '');
     let coverUrl = null;
     
-    // Check for cover files
     const possibleCovers = [
       `${baseName}.jpg`,
       `${baseName}.jpeg`,
@@ -114,7 +141,6 @@ function extractMetadata(filename) {
     };
   }
   
-  // Fallback: use filename as title
   return {
     artist: 'Unknown Artist',
     title: nameWithoutExt,
@@ -132,14 +158,17 @@ app.get('/api/playlist/songs', getUserFromSession, (req, res) => {
 app.get('/api/playlist/state', getUserFromSession, (req, res) => {
   const currentSong = playlistState.songs[playlistState.currentIndex];
   const metadata = currentSong ? extractMetadata(currentSong) : null;
+  const currentVol = getCurrentVolume();
   
   res.json({
     currentIndex: playlistState.currentIndex,
     currentSong: currentSong || null,
     metadata: metadata,
     isPlaying: playlistState.isPlaying,
-    volume: playlistState.volume,
+    volume: currentVol,
     previousVolume: playlistState.previousVolume,
+    targetVolume: playlistState.targetVolume,
+    isFading: playlistState.fadeStartTime !== null,
     isShuffled: playlistState.isShuffled,
     totalSongs: playlistState.songs.length
   });
@@ -148,13 +177,15 @@ app.get('/api/playlist/state', getUserFromSession, (req, res) => {
 app.get('/api/playlist/public', (req, res) => {
   const currentSong = playlistState.songs[playlistState.currentIndex];
   const metadata = currentSong ? extractMetadata(currentSong) : null;
+  const currentVol = getCurrentVolume();
   
   res.json({
     currentIndex: playlistState.currentIndex,
     currentSong: currentSong || null,
     metadata: metadata,
     isPlaying: playlistState.isPlaying,
-    volume: playlistState.volume,
+    volume: currentVol,
+    isFading: playlistState.fadeStartTime !== null,
     totalSongs: playlistState.songs.length
   });
 });
@@ -191,8 +222,15 @@ app.post('/api/playlist/skip', getUserFromSession, (req, res) => {
 
 app.post('/api/playlist/volume', getUserFromSession, (req, res) => {
   const { volume } = req.body;
-  playlistState.volume = Math.max(0, Math.min(100, volume));
-  console.log(`[PLAYLIST] Volume: ${playlistState.volume}%`);
+  const newVol = Math.max(0, Math.min(100, volume));
+  
+  // Set immediately without fade (user control)
+  playlistState.volume = newVol;
+  playlistState.targetVolume = newVol;
+  playlistState.fadeStartTime = null;
+  playlistState.fadeDirection = null;
+  
+  console.log(`[PLAYLIST] Volume set to: ${playlistState.volume}%`);
   res.json({ volume: playlistState.volume });
 });
 
@@ -232,20 +270,6 @@ app.post('/api/playlist/next-song', (req, res) => {
     currentSong: currentSong,
     metadata: metadata
   });
-});
-
-// Store previous volume (for timer integration)
-app.post('/api/playlist/store-volume', getUserFromSession, (req, res) => {
-  playlistState.previousVolume = playlistState.volume;
-  console.log(`[PLAYLIST] Stored previous volume: ${playlistState.previousVolume}%`);
-  res.json({ previousVolume: playlistState.previousVolume });
-});
-
-// Restore previous volume
-app.post('/api/playlist/restore-volume', getUserFromSession, (req, res) => {
-  playlistState.volume = playlistState.previousVolume;
-  console.log(`[PLAYLIST] Restored volume to: ${playlistState.volume}%`);
-  res.json({ volume: playlistState.volume });
 });
 
 // Initialize songs on startup
@@ -437,7 +461,7 @@ async function updatePlaylistStatus() {
       nowPlaying.textContent = 'No song loaded';
     }
     
-    // Update volume slider
+    // Update volume slider (smooth during fade)
     volumeSlider.value = data.volume;
     volumeValue.textContent = data.volume;
     
@@ -518,7 +542,7 @@ skipBtn.addEventListener('click', async () => {
 // Initialize
 loadSongs();
 updatePlaylistStatus();
-playlistInterval = setInterval(updatePlaylistStatus, 2000);
+playlistInterval = setInterval(updatePlaylistStatus, 500);
 
 // Return module instance
 return {
