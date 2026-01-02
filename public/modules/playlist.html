@@ -83,10 +83,34 @@ function extractMetadata(filename) {
   // Try to parse "Artist - Title" format
   if (nameWithoutExt.includes(' - ')) {
     const parts = nameWithoutExt.split(' - ');
+    const artist = parts[0].trim();
+    const title = parts.slice(1).join(' - ').trim();
+    
+    // Check for cover image (same name as song file but .jpg or .png)
+    const musicDir = path.join(__dirname, 'public', 'music');
+    const baseName = filename.replace(/\.(mp3|wav|ogg)$/i, '');
+    let coverUrl = null;
+    
+    // Check for cover files
+    const possibleCovers = [
+      `${baseName}.jpg`,
+      `${baseName}.jpeg`,
+      `${baseName}.png`,
+      `${baseName}.webp`
+    ];
+    
+    for (const coverFile of possibleCovers) {
+      if (fs.existsSync(path.join(musicDir, coverFile))) {
+        coverUrl = `/music/${coverFile}`;
+        break;
+      }
+    }
+    
     return {
-      artist: parts[0].trim(),
-      title: parts.slice(1).join(' - ').trim(),
-      filename: filename
+      artist: artist,
+      title: title,
+      filename: filename,
+      coverUrl: coverUrl
     };
   }
   
@@ -94,7 +118,8 @@ function extractMetadata(filename) {
   return {
     artist: 'Unknown Artist',
     title: nameWithoutExt,
-    filename: filename
+    filename: filename,
+    coverUrl: null
   };
 }
 
