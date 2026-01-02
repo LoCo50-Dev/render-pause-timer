@@ -35,7 +35,7 @@
       font-family: Arial, sans-serif;
       color: white;
       display: flex;
-      justify-content: center;
+      justify-content: flex-start;
       align-items: center;
       min-height: 100vh;
       padding: 20px;
@@ -45,23 +45,79 @@
     .now-playing {
       background: rgba(26, 26, 26, 0.95);
       border-radius: 20px;
+      padding: 25px;
+      display: flex;
+      align-items: center;
+      gap: 25px;
+      min-width: 400px;
+      max-width: 700px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      position: relative;
+      transform: translateX(-150%);
+      opacity: 0;
+      transition: none;
+      
+      /* Rainbow border */
+      padding: 4px;
+      background: linear-gradient(
+        90deg,
+        #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3,
+        #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000
+      );
+      background-size: 300% 100%;
+      animation: rainbow-flow 15s linear infinite;
+    }
+    
+    @keyframes rainbow-flow {
+      0% { background-position: 0% 0%; }
+      100% { background-position: 300% 0%; }
+    }
+    
+    .now-playing-inner {
+      background: rgba(26, 26, 26, 0.95);
+      border-radius: 16px;
       padding: 20px;
       display: flex;
       align-items: center;
-      gap: 20px;
-      max-width: 500px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-      opacity: 0;
-      transition: opacity 0.5s ease;
+      gap: 25px;
+      width: 100%;
     }
     
-    .now-playing.visible {
-      opacity: 1;
+    /* Slide in from left */
+    .now-playing.slide-in {
+      animation: slideInFromLeft 1s ease-out forwards;
+    }
+    
+    /* Slide out to right */
+    .now-playing.slide-out {
+      animation: slideOutToRight 1s ease-in forwards;
+    }
+    
+    @keyframes slideInFromLeft {
+      0% {
+        transform: translateX(-150%);
+        opacity: 0;
+      }
+      100% {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    @keyframes slideOutToRight {
+      0% {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      100% {
+        transform: translateX(150%);
+        opacity: 0;
+      }
     }
     
     .album-cover {
-      width: 100px;
-      height: 100px;
+      width: 120px;
+      height: 120px;
       border-radius: 12px;
       background: linear-gradient(135deg, #1DB954, #1ed760);
       flex-shrink: 0;
@@ -69,7 +125,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 48px;
+      font-size: 60px;
     }
     
     .album-cover img {
@@ -84,26 +140,26 @@
     }
     
     .track-name {
-      font-size: 20px;
+      font-size: 26px;
       font-weight: bold;
-      margin-bottom: 8px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      margin-bottom: 10px;
+      line-height: 1.3;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
     }
     
     .artist-name {
-      font-size: 16px;
+      font-size: 20px;
       opacity: 0.8;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      line-height: 1.3;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
     }
     
     .music-logo {
-      font-size: 12px;
+      font-size: 14px;
       opacity: 0.5;
-      margin-top: 8px;
+      margin-top: 10px;
     }
     
     .hidden {
@@ -123,13 +179,15 @@
 
   <!-- Now Playing Display -->
   <div class="now-playing" id="nowPlaying">
-    <div class="album-cover" id="albumCover">
-      🎵
-    </div>
-    <div class="track-info">
-      <div class="track-name" id="trackName">No music playing</div>
-      <div class="artist-name" id="artistName">Start music to see info</div>
-      <div class="music-logo" id="musicSource">🎵 Music</div>
+    <div class="now-playing-inner">
+      <div class="album-cover" id="albumCover">
+        🎵
+      </div>
+      <div class="track-info">
+        <div class="track-name" id="trackName">No music playing</div>
+        <div class="artist-name" id="artistName">Start music to see info</div>
+        <div class="music-logo" id="musicSource">🎵 Music</div>
+      </div>
     </div>
   </div>
 
@@ -154,6 +212,10 @@
     let spotifyAvailable = false;
     let playlistAvailable = false;
     
+    // Animation state
+    let isVisible = false;
+    let hideTimeout = null;
+    
     // Playlist specific state
     let currentSong = null;
     let nextSong = null;
@@ -161,6 +223,65 @@
     let crossfadeStarted = false;
     let isPlaying = false;
     const CROSSFADE_TIME = 5; // seconds
+    
+    // Wake Lock to prevent sleep (keeps audio playing when minimized)
+    let wakeLock = null;
+    
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          console.log('[VISUALIZER] Wake Lock acquired');
+        }
+      } catch (err) {
+        console.warn('[VISUALIZER] Wake Lock not supported:', err);
+      }
+    }
+    
+    // Request wake lock on load
+    requestWakeLock();
+    
+    // Re-request if visibility changes
+    document.addEventListener('visibilitychange', () => {
+      if (wakeLock !== null && document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    });
+    
+    // Show visualizer with slide-in animation
+    function showVisualizer() {
+      if (isVisible) return;
+      
+      isVisible = true;
+      nowPlaying.classList.remove('slide-out', 'hidden');
+      nowPlaying.classList.add('slide-in');
+      
+      // Clear any existing hide timeout
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+      }
+      
+      // Schedule hide after 10 seconds
+      hideTimeout = setTimeout(() => {
+        hideVisualizer();
+      }, 10000);
+    }
+    
+    // Hide visualizer with slide-out animation
+    function hideVisualizer() {
+      if (!isVisible) return;
+      
+      isVisible = false;
+      nowPlaying.classList.remove('slide-in');
+      nowPlaying.classList.add('slide-out');
+      
+      // After animation completes, hide element
+      setTimeout(() => {
+        if (!isVisible) {
+          nowPlaying.classList.add('hidden');
+        }
+      }, 1000);
+    }
     
     // Check which music modules are available
     async function checkMusicModules() {
@@ -238,25 +359,45 @@
           }
           
           console.log('[PLAYLIST] Now playing:', currentSong);
+          
+          // Show visualizer when new song starts
+          if (data.metadata) {
+            trackName.textContent = data.metadata.title;
+            artistName.textContent = data.metadata.artist;
+            
+            // Set cover image if available
+            if (data.metadata.coverUrl) {
+              albumCover.innerHTML = `<img src="${data.metadata.coverUrl}" alt="Cover">`;
+            } else {
+              albumCover.innerHTML = '🎵';
+            }
+          } else {
+            trackName.textContent = currentSong.replace(/\.(mp3|wav|ogg)$/i, '');
+            artistName.textContent = 'Local Music';
+            albumCover.innerHTML = '🎵';
+          }
+          
+          showVisualizer();
         }
         
-        // Update UI
+        // Update metadata and cover without showing visualizer
         if (data.metadata && data.isPlaying) {
           trackName.textContent = data.metadata.title;
           artistName.textContent = data.metadata.artist;
-          albumCover.innerHTML = '🎵';
-          nowPlaying.classList.add('visible');
+          
+          // Update cover if available
+          if (data.metadata.coverUrl) {
+            albumCover.innerHTML = `<img src="${data.metadata.coverUrl}" alt="Cover">`;
+          } else {
+            albumCover.innerHTML = '🎵';
+          }
         } else if (data.currentSong && data.isPlaying) {
           trackName.textContent = data.currentSong.replace(/\.(mp3|wav|ogg)$/i, '');
           artistName.textContent = 'Local Music';
           albumCover.innerHTML = '🎵';
-          nowPlaying.classList.add('visible');
-        } else {
-          nowPlaying.classList.remove('visible');
         }
       } catch (err) {
         console.error('[PLAYLIST] Update error:', err);
-        nowPlaying.classList.remove('visible');
       }
     }
     
@@ -353,7 +494,7 @@
       try {
         // This would need to be implemented based on your Spotify API
         // For now, just hide the overlay
-        nowPlaying.classList.remove('visible');
+        hideVisualizer();
       } catch (err) {
         console.error('[SPOTIFY] Update error:', err);
       }
