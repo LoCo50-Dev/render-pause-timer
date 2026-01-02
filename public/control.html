@@ -3,626 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Countdown Timer</title>
+  <title>Music Visualizer</title>
   
   <!-- ==========================================
        MODULE CONFIGURATION
        ========================================== -->
   <script type="application/json" id="module-config">
   {
-    "id": "timer",
-    "name": "Break Timer",
-    "priority": 5,
-    "borderColor": "#1a3a52",
-    "activeColor": "#00BCD4",
-    "hasControllerUI": true,
+    "id": "music-visualizer",
+    "name": "Music Visualizer",
+    "priority": 999,
+    "hasControllerUI": false,
     "hasOverlay": true,
-    "overlayUrl": "/modules/countdown.html",
+    "overlayUrl": "/modules/music-visualizer.html",
     "dependencies": []
   }
-  </script>
-  
-  <!-- ==========================================
-       SERVER MODULE CODE
-       ========================================== -->
-  <script type="text/x-server-module">
-// Initialize timer state
-if (!moduleStates.timer) {
-  moduleStates.timer = {
-    duration: 0,
-    startTime: null,
-    pausedAt: null,
-    pausedRemaining: 0,
-    isRunning: false,
-    isPaused: false,
-    wasSkipped: false,
-    language: 'de',
-    musicConnected: false
-  };
-}
-
-const timerState = moduleStates.timer;
-
-// Helper functions
-function getTimerRemaining() {
-  if (!timerState.isRunning) {
-    return 0;
-  }
-  
-  if (timerState.isPaused) {
-    return timerState.pausedRemaining;
-  }
-  
-  const now = Date.now();
-  const elapsed = Math.floor((now - timerState.startTime) / 1000);
-  const remaining = Math.max(0, timerState.duration - elapsed);
-  
-  return remaining;
-}
-
-function getTimerEndTime() {
-  if (!timerState.isRunning || timerState.isPaused) {
-    return null;
-  }
-  
-  return timerState.startTime + (timerState.duration * 1000);
-}
-
-// Routes
-app.get('/api/timer', getUserFromSession, (req, res) => {
-  const remaining = getTimerRemaining();
-  const endTime = getTimerEndTime();
-  
-  res.json({
-    duration: timerState.duration,
-    remaining: remaining,
-    endTime: endTime,
-    isRunning: timerState.isRunning,
-    isPaused: timerState.isPaused,
-    wasSkipped: timerState.wasSkipped,
-    language: timerState.language,
-    musicConnected: timerState.musicConnected
-  });
-});
-
-app.get('/api/timer/public', (req, res) => {
-  const remaining = getTimerRemaining();
-  const endTime = getTimerEndTime();
-  
-  res.json({
-    duration: timerState.duration,
-    remaining: remaining,
-    endTime: endTime,
-    isRunning: timerState.isRunning,
-    isPaused: timerState.isPaused,
-    wasSkipped: timerState.wasSkipped,
-    language: timerState.language
-  });
-});
-
-app.post('/api/timer/start', getUserFromSession, (req, res) => {
-  const { minutes } = req.body;
-  
-  if (!minutes || minutes <= 0) {
-    return res.status(400).json({ error: 'Invalid minutes' });
-  }
-  
-  const seconds = minutes * 60;
-  
-  timerState.duration = seconds;
-  timerState.startTime = Date.now();
-  timerState.pausedAt = null;
-  timerState.pausedRemaining = 0;
-  timerState.isRunning = true;
-  timerState.isPaused = false;
-  timerState.wasSkipped = false;
-  
-  console.log(`[TIMER] Started: ${minutes} min (${seconds}s)`);
-  console.log(`[TIMER] End time: ${new Date(getTimerEndTime()).toISOString()}`);
-  
-  // If music connected, increase volume (fade up from current to 75%)
-  if (timerState.musicConnected) {
-    // Check for Spotify module
-    if (moduleStates.spotify && moduleStates.spotify.volume !== undefined) {
-      const currentVol = moduleStates.spotify.volume;
-      moduleStates.spotify.previousVolume = currentVol;
-      moduleStates.spotify.targetVolume = 75;
-      moduleStates.spotify.fadeStartTime = Date.now();
-      moduleStates.spotify.fadeDirection = 'up';
-      console.log(`[TIMER] Music connected - Fading Spotify volume ${currentVol}% → 75%`);
-    }
-    
-    // Check for Playlist module
-    if (moduleStates.playlist && moduleStates.playlist.volume !== undefined) {
-      const currentVol = moduleStates.playlist.volume;
-      moduleStates.playlist.previousVolume = currentVol;
-      moduleStates.playlist.targetVolume = 75;
-      moduleStates.playlist.fadeStartTime = Date.now();
-      moduleStates.playlist.fadeDirection = 'up';
-      console.log(`[TIMER] Music connected - Fading Playlist volume ${currentVol}% → 75%`);
-    }
-  }
-  
-  const remaining = getTimerRemaining();
-  const endTime = getTimerEndTime();
-  
-  res.json({
-    duration: timerState.duration,
-    remaining: remaining,
-    endTime: endTime,
-    isRunning: timerState.isRunning,
-    isPaused: timerState.isPaused,
-    wasSkipped: false
-  });
-});
-
-app.post('/api/timer/pause', getUserFromSession, (req, res) => {
-  if (!timerState.isRunning) {
-    return res.status(400).json({ error: 'Timer not running' });
-  }
-  
-  if (timerState.isPaused) {
-    return res.status(400).json({ error: 'Timer already paused' });
-  }
-  
-  timerState.pausedRemaining = getTimerRemaining();
-  timerState.pausedAt = Date.now();
-  timerState.isPaused = true;
-  
-  console.log(`[TIMER] Paused at ${timerState.pausedRemaining}s remaining`);
-  
-  res.json({
-    duration: timerState.duration,
-    remaining: timerState.pausedRemaining,
-    endTime: null,
-    isRunning: timerState.isRunning,
-    isPaused: timerState.isPaused,
-    wasSkipped: timerState.wasSkipped
-  });
-});
-
-app.post('/api/timer/resume', getUserFromSession, (req, res) => {
-  if (!timerState.isRunning) {
-    return res.status(400).json({ error: 'Timer not running' });
-  }
-  
-  if (!timerState.isPaused) {
-    return res.status(400).json({ error: 'Timer not paused' });
-  }
-  
-  timerState.duration = timerState.pausedRemaining;
-  timerState.startTime = Date.now();
-  timerState.pausedAt = null;
-  timerState.isPaused = false;
-  
-  console.log(`[TIMER] Resumed with ${timerState.duration}s remaining`);
-  console.log(`[TIMER] New end time: ${new Date(getTimerEndTime()).toISOString()}`);
-  
-  const remaining = getTimerRemaining();
-  const endTime = getTimerEndTime();
-  
-  res.json({
-    duration: timerState.duration,
-    remaining: remaining,
-    endTime: endTime,
-    isRunning: timerState.isRunning,
-    isPaused: timerState.isPaused,
-    wasSkipped: timerState.wasSkipped
-  });
-});
-
-app.post('/api/timer/reset', getUserFromSession, (req, res) => {
-  const wasRunning = timerState.isRunning && getTimerRemaining() > 0;
-  
-  timerState.duration = 0;
-  timerState.startTime = null;
-  timerState.pausedAt = null;
-  timerState.pausedRemaining = 0;
-  timerState.isRunning = false;
-  timerState.isPaused = false;
-  timerState.wasSkipped = wasRunning;
-  
-  console.log(`[TIMER] Reset. Was skipped: ${wasRunning}`);
-  
-  // Restore music volume if connected (fade down from 75% to previous)
-  if (timerState.musicConnected) {
-    if (moduleStates.playlist && moduleStates.playlist.previousVolume !== undefined) {
-      const targetVol = moduleStates.playlist.previousVolume;
-      moduleStates.playlist.targetVolume = targetVol;
-      moduleStates.playlist.fadeStartTime = Date.now();
-      moduleStates.playlist.fadeDirection = 'down';
-      console.log(`[TIMER] Fading Playlist volume back to ${targetVol}%`);
-    }
-    if (moduleStates.spotify && moduleStates.spotify.previousVolume !== undefined) {
-      const targetVol = moduleStates.spotify.previousVolume;
-      moduleStates.spotify.targetVolume = targetVol;
-      moduleStates.spotify.fadeStartTime = Date.now();
-      moduleStates.spotify.fadeDirection = 'down';
-      console.log(`[TIMER] Fading Spotify volume back to ${targetVol}%`);
-    }
-  }
-  
-  res.json({
-    duration: 0,
-    remaining: 0,
-    endTime: null,
-    isRunning: false,
-    isPaused: false,
-    wasSkipped: wasRunning,
-    language: timerState.language
-  });
-});
-
-app.post('/api/timer/language', getUserFromSession, (req, res) => {
-  const { language } = req.body;
-  
-  if (language !== 'de' && language !== 'en') {
-    return res.status(400).json({ error: 'Invalid language' });
-  }
-  
-  timerState.language = language;
-  console.log(`[TIMER] Language changed to: ${language}`);
-  
-  res.json({ language: timerState.language });
-});
-
-app.post('/api/timer/music-connect', getUserFromSession, (req, res) => {
-  const { connected } = req.body;
-  timerState.musicConnected = connected;
-  console.log(`[TIMER] Music connection: ${connected ? 'ON' : 'OFF'}`);
-  res.json({ musicConnected: timerState.musicConnected });
-});
-  </script>
-  
-  <!-- ==========================================
-       CONTROLLER MODULE CODE
-       ========================================== -->
-  <script type="text/x-controller-module">
-let timerInterval = null;
-let isUpdating = false;
-let musicModuleAvailable = false;
-
-// Check if any music module exists (Spotify or Playlist)
-async function checkMusicModule() {
-  try {
-    const res = await fetch(`${apiUrl}/api/modules/list`);
-    const data = await res.json();
-    musicModuleAvailable = data.modules.some(m => 
-      (m.id === 'spotify' || m.id === 'playlist') && m.musicModule === true
-    );
-    updateMusicCheckbox();
-  } catch (err) {
-    console.error('[TIMER] Error checking music modules:', err);
-  }
-}
-
-function updateMusicCheckbox() {
-  const checkbox = document.getElementById('timer-music-checkbox');
-  const label = document.querySelector('.timer-music-connect label');
-  
-  if (!musicModuleAvailable) {
-    checkbox.disabled = true;
-    checkbox.checked = false;
-    label.style.opacity = '0.5';
-    label.title = 'No music module available';
-  } else {
-    checkbox.disabled = false;
-    label.style.opacity = '1';
-    label.title = '';
-  }
-}
-
-// Render UI
-container.innerHTML = `
-  <style>
-    .timer-preview {
-      background: #1a1a1a;
-      padding: 15px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      text-align: center;
-    }
-    
-    .timer-preview-time {
-      font-size: 28px;
-      font-weight: bold;
-      margin-bottom: 8px;
-    }
-    
-    .timer-preview-end {
-      font-size: 14px;
-      opacity: 0.7;
-    }
-    
-    .timer-input-group {
-      margin-bottom: 15px;
-    }
-    
-    .timer-input-group label {
-      display: block;
-      margin-bottom: 6px;
-      font-size: 13px;
-      opacity: 0.8;
-    }
-    
-    .timer-input-group input {
-      width: 100%;
-      padding: 10px;
-      background: #1a1a1a;
-      border: 2px solid #3a3a3a;
-      border-radius: 8px;
-      color: white;
-      font-size: 15px;
-      transition: border-color 0.3s;
-    }
-    
-    .timer-input-group input:focus {
-      outline: none;
-      border-color: #00BCD4;
-    }
-    
-    .timer-music-connect {
-      margin-bottom: 15px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 10px;
-      background: #1a1a1a;
-      border-radius: 8px;
-      width: 50%;
-      margin-left: auto;
-    }
-    
-    .timer-music-connect input[type="checkbox"] {
-      width: 16px;
-      height: 16px;
-      cursor: pointer;
-      accent-color: #00BCD4;
-    }
-    
-    .timer-music-connect label {
-      font-size: 12px;
-      cursor: pointer;
-      user-select: none;
-      white-space: nowrap;
-    }
-    
-    .timer-button-group {
-      display: flex;
-      gap: 8px;
-      margin-top: 15px;
-    }
-    
-    .timer-button-group button {
-      flex: 1;
-      padding: 12px;
-      border: none;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-    
-    .timer-btn-start {
-      background: #4CAF50;
-      color: white;
-    }
-    
-    .timer-btn-start:hover {
-      background: #45a049;
-    }
-    
-    .timer-btn-pause {
-      background: #FF9800;
-      color: white;
-    }
-    
-    .timer-btn-pause:hover {
-      background: #e68900;
-    }
-    
-    .timer-btn-reset {
-      background: #f44336;
-      color: white;
-    }
-    
-    .timer-btn-reset:hover {
-      background: #da190b;
-    }
-    
-    .hidden {
-      display: none !important;
-    }
-  </style>
-  
-  <div class="timer-preview">
-    <div class="timer-preview-time" id="timer-preview-time">00:00</div>
-    <div class="timer-preview-end" id="timer-preview-end">Resume: --:-- Uhr</div>
-  </div>
-  
-  <div class="timer-input-group">
-    <label for="timer-time-input">Time in minutes:</label>
-    <input type="number" id="timer-time-input" min="1" placeholder="e.g. 5" value="5">
-  </div>
-  
-  <div class="timer-music-connect">
-    <input type="checkbox" id="timer-music-checkbox">
-    <label for="timer-music-checkbox">🎵 Music</label>
-  </div>
-  
-  <div class="timer-button-group">
-    <button class="timer-btn-start" id="timer-start-btn">▶️ Start</button>
-    <button class="timer-btn-pause hidden" id="timer-pause-btn">⏸️ Pause</button>
-    <button class="timer-btn-reset hidden" id="timer-reset-btn">⏹️ Reset</button>
-  </div>
-`;
-
-// Get elements
-const previewTime = document.getElementById('timer-preview-time');
-const previewEnd = document.getElementById('timer-preview-end');
-const timeInput = document.getElementById('timer-time-input');
-const startBtn = document.getElementById('timer-start-btn');
-const pauseBtn = document.getElementById('timer-pause-btn');
-const resetBtn = document.getElementById('timer-reset-btn');
-const musicCheckbox = document.getElementById('timer-music-checkbox');
-
-// Update UI function
-async function updateTimerUI() {
-  if (isUpdating) return;
-  
-  try {
-    const res = await fetch(`${apiUrl}/api/timer`, { headers: getHeaders() });
-    const timer = await res.json();
-    
-    if (timer.isRunning && timer.remaining > 0) {
-      const mins = Math.floor(timer.remaining / 60);
-      const secs = timer.remaining % 60;
-      previewTime.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-      
-      if (timer.endTime && !timer.isPaused) {
-        const endDate = new Date(timer.endTime);
-        const hours = endDate.getHours().toString().padStart(2, '0');
-        const minutes = endDate.getMinutes().toString().padStart(2, '0');
-        previewEnd.textContent = `Resume: ${hours}:${minutes} Uhr`;
-      } else {
-        previewEnd.textContent = 'Paused';
-      }
-      
-      panel.style.borderColor = moduleConfig.activeColor;
-      startBtn.classList.add('hidden');
-      pauseBtn.classList.remove('hidden');
-      resetBtn.classList.remove('hidden');
-      
-      if (timer.isPaused) {
-        pauseBtn.textContent = '▶️ Resume';
-      } else {
-        pauseBtn.textContent = '⏸️ Pause';
-      }
-    } else {
-      previewTime.textContent = '00:00';
-      previewEnd.textContent = 'Resume: --:-- Uhr';
-      panel.style.borderColor = moduleConfig.borderColor;
-      startBtn.classList.remove('hidden');
-      pauseBtn.classList.add('hidden');
-      resetBtn.classList.add('hidden');
-      
-      // Auto-restore volume when timer naturally expires
-      if (timer.musicConnected && !timer.isRunning && timer.remaining === 0) {
-        try {
-          await fetch(`${apiUrl}/api/playlist/restore-volume`, {
-            method: 'POST',
-            headers: getHeaders()
-          });
-          console.log('[TIMER] Auto-restored music volume');
-        } catch (err) {
-          // Module might not exist
-        }
-      }
-    }
-    
-    // Update music checkbox state
-    musicCheckbox.checked = timer.musicConnected || false;
-  } catch (err) {
-    console.error('[TIMER] Update error:', err);
-  }
-}
-
-// Event listeners
-startBtn.addEventListener('click', async () => {
-  isUpdating = true;
-  const minutes = parseInt(timeInput.value) || 5;
-  
-  try {
-    await fetch(`${apiUrl}/api/timer/start`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ minutes })
-    });
-    
-    await updateTimerUI();
-  } catch (err) {
-    console.error('[TIMER] Start error:', err);
-  } finally {
-    isUpdating = false;
-  }
-});
-
-pauseBtn.addEventListener('click', async () => {
-  isUpdating = true;
-  
-  try {
-    const res = await fetch(`${apiUrl}/api/timer`, { headers: getHeaders() });
-    const currentState = await res.json();
-    
-    const endpoint = currentState.isPaused ? '/api/timer/resume' : '/api/timer/pause';
-    
-    await fetch(`${apiUrl}${endpoint}`, {
-      method: 'POST',
-      headers: getHeaders()
-    });
-    
-    await updateTimerUI();
-  } catch (err) {
-    console.error('[TIMER] Pause/Resume error:', err);
-  } finally {
-    isUpdating = false;
-  }
-});
-
-resetBtn.addEventListener('click', async () => {
-  isUpdating = true;
-  
-  try {
-    await fetch(`${apiUrl}/api/timer/reset`, {
-      method: 'POST',
-      headers: getHeaders()
-    });
-    
-    await updateTimerUI();
-  } catch (err) {
-    console.error('[TIMER] Reset error:', err);
-  } finally {
-    isUpdating = false;
-  }
-});
-
-musicCheckbox.addEventListener('change', async (e) => {
-  try {
-    await fetch(`${apiUrl}/api/timer/music-connect`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ connected: e.target.checked })
-    });
-  } catch (err) {
-    console.error('[TIMER] Music connect error:', err);
-  }
-});
-
-// Start polling
-timerInterval = setInterval(updateTimerUI, 1000);
-updateTimerUI();
-checkMusicModule();
-
-// Return module instance
-return {
-  destroy: function() {
-    if (timerInterval) {
-      clearInterval(timerInterval);
-    }
-  }
-};
   </script>
   
   <!-- ==========================================
        OBS OVERLAY STYLES
        ========================================== -->
   <style>
-    @font-face {
-      font-family: 'StreamFont';
-      src: url('/fonts/font.ttf') format('truetype');
-    }
-    
     * {
       margin: 0;
       padding: 0;
@@ -631,104 +32,164 @@ return {
     
     body {
       background: transparent;
-      font-family: 'StreamFont', Arial, sans-serif;
+      font-family: Arial, sans-serif;
       color: white;
       display: flex;
-      justify-content: center;
+      justify-content: flex-start;
       align-items: center;
-      height: 100vh;
+      min-height: 100vh;
+      padding: 30px;
       overflow: hidden;
     }
     
-    .countdown-container {
-      text-align: center;
-      padding: 40px;
+    .now-playing {
+      background: rgba(26, 26, 26, 0.95);
+      border-radius: 25px;
+      padding: 35px;
+      display: flex;
+      align-items: center;
+      gap: 35px;
+      min-width: 600px;
+      max-width: 1200px;
+      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+      position: relative;
+      transform: translateX(-150%);
+      opacity: 0;
+      transition: none;
+      
+      /* Rainbow border */
+      padding: 5px;
+      background: linear-gradient(
+        90deg,
+        #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3,
+        #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000
+      );
+      background-size: 300% 100%;
+      animation: rainbow-flow 15s linear infinite;
     }
     
-    .countdown-time {
-      font-size: 120px;
-      font-weight: bold;
-      text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
-      margin-bottom: 20px;
+s rainbow-flow {
+      0% { background-position: 0% 0%; }
+      100% { background-position: 300% 0%; }
     }
     
-    .countdown-bar {
-      width: 600px;
-      height: 20px;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 10px;
+    .now-playing-inner {
+      background: rgba(26, 26, 26, 0.95);
+      border-radius: 20px;
+      padding: 30px;
+      display: flex;
+      align-items: center;
+      gap: 35px;
+      width: 100%;
+    }
+    
+    /* Slide in from left */
+    .now-playing.slide-in {
+      animation: slideInFromLeft 1s ease-out forwards;
+    }
+    
+    /* Slide out to LEFT (not right) */
+    .now-playing.slide-out {
+      animation: slideOutToLeft 1s ease-in forwards;
+    }
+    
+    @keyframes slideInFromLeft {
+      0% {
+        transform: translateX(-150%);
+        opacity: 0;
+      }
+      100% {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    @keyframes slideOutToLeft {
+      0% {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      100% {
+        transform: translateX(-150%);
+        opacity: 0;
+      }
+    }
+    
+    .album-cover {
+      width: 200px;
+      height: 200px;
+      border-radius: 15px;
+      background: linear-gradient(135deg, #1DB954, #1ed760);
+      flex-shrink: 0;
       overflow: hidden;
-      margin: 0 auto 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 100px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     }
     
-    .countdown-bar-fill {
+    .album-cover img {
+      width: 100%;
       height: 100%;
-      background: linear-gradient(90deg, #00BCD4, #00E5FF);
-      transition: width 0.5s linear;
-      border-radius: 10px;
+      object-fit: cover;
     }
     
-    .countdown-end {
-      font-size: 24px;
-      opacity: 0.8;
+    .track-info {
+      flex: 1;
+      min-width: 0;
     }
     
-    .countdown-message {
-      font-size: 72px;
-      color: white;
+    .track-name {
+      font-size: 36px;
       font-weight: bold;
-      text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
-      margin-bottom: 20px;
-      animation: pulse-white 1.5s ease-in-out infinite;
+      margin-bottom: 15px;
+      line-height: 1.3;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
     }
     
-    .countdown-message.stop-pulse {
-      animation: none;
-      opacity: 1;
+    .artist-name {
+      font-size: 28px;
+      opacity: 0.85;
+      line-height: 1.3;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
     }
     
-    .countdown-skipped {
-      font-size: 24px;
-      color: #FF5722;
-      font-weight: bold;
-      -webkit-text-stroke: 2px white;
-      text-stroke: 2px white;
-      paint-order: stroke fill;
-      animation: pulse-red 1.5s ease-in-out infinite;
-    }
-    
-    .countdown-skipped.stop-pulse {
-      animation: none;
-      opacity: 1;
-    }
-    
-    @keyframes pulse-white {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-    
-    @keyframes pulse-red {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.6; }
+    .music-logo {
+      font-size: 18px;
+      opacity: 0.5;
+      margin-top: 15px;
     }
     
     .hidden {
       display: none !important;
     }
+    
+    /* Audio player hidden */
+    #audio-player, #audio-player-next {
+      display: none;
+    }
   </style>
 </head>
 <body>
-  <!-- ==========================================
-       OBS OVERLAY HTML
-       ========================================== -->
-  <div class="countdown-container">
-    <div class="countdown-time" id="countdownTime">00:00</div>
-    <div class="countdown-message hidden" id="countdownMessage">Stream setzt gleich fort</div>
-    <div class="countdown-bar">
-      <div class="countdown-bar-fill" id="countdownBar"></div>
+  <!-- Audio players for Playlist module -->
+  <audio id="audio-player" preload="auto" playsinline></audio>
+  <audio id="audio-player-next" preload="auto" playsinline></audio>
+
+  <!-- Now Playing Display -->
+  <div class="now-playing" id="nowPlaying">
+    <div class="now-playing-inner">
+      <div class="album-cover" id="albumCover">
+        🎵
+      </div>
+      <div class="track-info">
+        <div class="track-name" id="trackName">No music playing</div>
+        <div class="artist-name" id="artistName">Start music to see info</div>
+        <div class="music-logo" id="musicSource">🎵 Music</div>
+      </div>
     </div>
-    <div class="countdown-end" id="countdownEnd">Ungefähr um --:-- Uhr</div>
-    <div class="countdown-skipped hidden" id="countdownSkipped">Pause wurde übersprungen</div>
   </div>
 
   <!-- ==========================================
@@ -737,120 +198,370 @@ return {
   <script>
     const API_URL = window.location.origin;
     
-    const timeEl = document.getElementById('countdownTime');
-    const barEl = document.getElementById('countdownBar');
-    const endEl = document.getElementById('countdownEnd');
-    const messageEl = document.getElementById('countdownMessage');
-    const skippedEl = document.getElementById('countdownSkipped');
+    const nowPlaying = document.getElementById('nowPlaying');
+    const albumCover = document.getElementById('albumCover');
+    const trackName = document.getElementById('trackName');
+    const artistName = document.getElementById('artistName');
+    const musicSource = document.getElementById('musicSource');
     
-    const texts = {
-      de: {
-        around: 'Ungefähr um',
-        clock: 'Uhr',
-        skipped: 'Pause wurde übersprungen',
-        starting: 'Stream setzt gleich fort'
-      },
-      en: {
-        around: 'Around',
-        clock: "o'clock",
-        skipped: 'Break was skipped',
-        starting: 'Stream continues shortly'
-      }
-    };
+    // Audio players for playlist
+    const audioPlayer = document.getElementById('audio-player');
+    const audioPlayerNext = document.getElementById('audio-player-next');
     
-    let currentLang = 'de';
-    let messageShownAt = null;
-    let skippedShownAt = null;
+    let activeModule = null;
+    let lastTrack = null;
+    let spotifyAvailable = false;
+    let playlistAvailable = false;
     
-    async function updateCountdown() {
-      try {
-        const res = await fetch(`${API_URL}/api/timer/public`);
-        const timer = await res.json();
-        
-        currentLang = timer.language || 'de';
-        
-        if (timer.isRunning && timer.remaining > 0) {
-          const mins = Math.floor(timer.remaining / 60);
-          const secs = timer.remaining % 60;
-          timeEl.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-          timeEl.classList.remove('hidden');
-          
-          const percent = (timer.remaining / timer.duration) * 100;
-          barEl.style.width = `${percent}%`;
-          
-          if (timer.endTime) {
-            const endDate = new Date(timer.endTime);
-            const hours = endDate.getHours().toString().padStart(2, '0');
-            const minutes = endDate.getMinutes().toString().padStart(2, '0');
-            endEl.textContent = `${texts[currentLang].around} ${hours}:${minutes} ${texts[currentLang].clock}`;
-            endEl.classList.remove('hidden');
-          } else {
-            endEl.classList.add('hidden');
-          }
-          
-          messageEl.classList.add('hidden');
-          skippedEl.classList.add('hidden');
-          messageShownAt = null;
-          skippedShownAt = null;
-        } else {
-          timeEl.classList.add('hidden');
-          barEl.style.width = '0%';
-          
-          if (timer.wasSkipped) {
-            messageEl.textContent = texts[currentLang].starting;
-            messageEl.classList.remove('hidden');
-            
-            if (messageShownAt === null) {
-              messageShownAt = Date.now();
-            }
-            
-            const messageElapsed = Date.now() - messageShownAt;
-            if (messageElapsed > 5000) {
-              messageEl.classList.add('stop-pulse');
-            } else {
-              messageEl.classList.remove('stop-pulse');
-            }
-            
-            skippedEl.textContent = texts[currentLang].skipped;
-            skippedEl.classList.remove('hidden');
-            endEl.classList.add('hidden');
-            
-            if (skippedShownAt === null) {
-              skippedShownAt = Date.now();
-            }
-            
-            const skippedElapsed = Date.now() - skippedShownAt;
-            if (skippedElapsed > 5000) {
-              skippedEl.classList.add('stop-pulse');
-            } else {
-              skippedEl.classList.remove('stop-pulse');
-            }
-          } else {
-            messageEl.textContent = texts[currentLang].starting;
-            messageEl.classList.remove('hidden');
-            
-            if (messageShownAt === null) {
-              messageShownAt = Date.now();
-            }
-            
-            const messageElapsed = Date.now() - messageShownAt;
-            if (messageElapsed > 5000) {
-              messageEl.classList.add('stop-pulse');
-            } else {
-              messageEl.classList.remove('stop-pulse');
-            }
-            
-            skippedEl.classList.add('hidden');
-            endEl.classList.add('hidden');
-          }
+    // Animation state
+    let isVisible = false;
+    let hideTimeout = null;
+    
+    // Playlist specific state
+    let currentSong = null;
+    let nextSong = null;
+    let currentVolume = 50;
+    let crossfadeStarted = false;
+    let isPlaying = false;
+    const CROSSFADE_TIME = 5;
+    
+    // Audio Context for better compatibility
+    let audioContext = null;
+    let audioSource = null;
+    let audioSourceNext = null;
+    
+    // Initialize Audio Context on first user interaction
+    function initAudioContext() {
+      if (!audioContext) {
+        try {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          console.log('[VISUALIZER] Audio Context initialized');
+        } catch (err) {
+          console.warn('[VISUALIZER] Audio Context not supported:', err);
         }
-      } catch (err) {
-        console.error('[COUNTDOWN] Update error:', err);
       }
     }
     
-    setInterval(updateCountdown, 100);
-    updateCountdown();
+    // Resume Audio Context (for iOS/Android)
+    function resumeAudioContext() {
+      if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+          console.log('[VISUALIZER] Audio Context resumed');
+        });
+      }
+    }
+    
+    // Keep page alive (prevent sleep)
+    let wakeLock = null;
+    let noSleepInterval = null;
+    
+    async function keepAlive() {
+      // Method 1: Wake Lock API
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          console.log('[VISUALIZER] Wake Lock acquired');
+          
+          wakeLock.addEventListener('release', () => {
+            console.log('[VISUALIZER] Wake Lock released');
+          });
+        }
+      } catch (err) {
+        console.warn('[VISUALIZER] Wake Lock not supported');
+      }
+      
+      // Method 2: NoSleep.js technique (invisible video loop)
+      if (!noSleepInterval) {
+        noSleepInterval = setInterval(() => {
+          // Ping to keep alive
+          if (audioContext) {
+            resumeAudioContext();
+          }
+        }, 15000);
+      }
+      
+      // Method 3: Audio Context keep-alive
+      initAudioContext();
+      resumeAudioContext();
+    }
+    
+    // Start keep-alive on load
+    keepAlive();
+    
+    // Re-acquire wake lock on visibility change
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        keepAlive();
+        resumeAudioContext();
+      }
+    });
+    
+    // Handle page focus
+    window.addEventListener('focus', () => {
+      keepAlive();
+      resumeAudioContext();
+    });
+    
+    // Show visualizer with slide-in animation
+    function showVisualizer() {
+      if (isVisible) return;
+      
+      isVisible = true;
+      nowPlaying.classList.remove('slide-out', 'hidden');
+      nowPlaying.classList.add('slide-in');
+      
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+      }
+      
+      hideTimeout = setTimeout(() => {
+        hideVisualizer();
+      }, 10000);
+    }
+    
+    // Hide visualizer with slide-out animation (to LEFT)
+    function hideVisualizer() {
+      if (!isVisible) return;
+      
+      isVisible = false;
+      nowPlaying.classList.remove('slide-in');
+      nowPlaying.classList.add('slide-out');
+      
+      setTimeout(() => {
+        if (!isVisible) {
+          nowPlaying.classList.add('hidden');
+        }
+      }, 1000);
+    }
+    
+    // Check which music modules are available
+    async function checkMusicModules() {
+      try {
+        const res = await fetch(`${API_URL}/api/modules/list`);
+        const data = await res.json();
+        
+        spotifyAvailable = data.modules.some(m => m.id === 'spotify');
+        playlistAvailable = data.modules.some(m => m.id === 'playlist');
+        
+        console.log('[MUSIC VISUALIZER] Spotify available:', spotifyAvailable);
+        console.log('[MUSIC VISUALIZER] Playlist available:', playlistAvailable);
+        
+        // Determine active module
+        if (playlistAvailable) {
+          activeModule = 'playlist';
+          musicSource.textContent = '🎵 Playlist';
+          startPlaylistMode();
+        } else if (spotifyAvailable) {
+          activeModule = 'spotify';
+          musicSource.textContent = '🎵 Spotify';
+          startSpotifyMode();
+        } else {
+          console.warn('[MUSIC VISUALIZER] No music modules available');
+        }
+      } catch (err) {
+        console.error('[MUSIC VISUALIZER] Error checking modules:', err);
+      }
+    }
+    
+    // ========== PLAYLIST MODE ==========
+    
+    function startPlaylistMode() {
+      console.log('[MUSIC VISUALIZER] Starting Playlist mode');
+      
+      // Initialize Audio Context
+      initAudioContext();
+      
+      // Setup audio players
+      setupAudioListeners();
+      
+      // Start polling
+      updatePlaylist();
+      setInterval(updatePlaylist, 500);
+    }
+    
+    async function updatePlaylist() {
+      try {
+        const res = await fetch(`${API_URL}/api/playlist/public`);
+        const data = await res.json();
+        
+        // Resume audio context if needed
+        resumeAudioContext();
+        
+        // Update volume smoothly
+        if (data.volume !== currentVolume) {
+          currentVolume = data.volume;
+          audioPlayer.volume = currentVolume / 100;
+          
+          if (audioPlayerNext.volume > 0) {
+            // During crossfade, maintain ratio
+          } else {
+            audioPlayerNext.volume = 0;
+          }
+        }
+        
+        // Update playing state
+        if (data.isPlaying !== isPlaying) {
+          isPlaying = data.isPlaying;
+          
+          if (isPlaying) {
+            resumeAudioContext();
+            audioPlayer.play().catch(e => {
+              console.error('[PLAYLIST] Play error:', e);
+              // Retry after user interaction
+              document.addEventListener('click', () => {
+                audioPlayer.play().catch(err => console.error('[PLAYLIST] Retry error:', err));
+              }, { once: true });
+            });
+          } else {
+            audioPlayer.pause();
+            audioPlayerNext.pause();
+          }
+        }
+        
+        // Update current song
+        if (data.currentSong && data.currentSong !== currentSong) {
+          currentSong = data.currentSong;
+          audioPlayer.src = `/music/${currentSong}`;
+          audioPlayer.volume = currentVolume / 100;
+          audioPlayer.load();
+          crossfadeStarted = false;
+          
+          if (isPlaying) {
+            resumeAudioContext();
+            audioPlayer.play().catch(e => console.error('[PLAYLIST] Play error:', e));
+          }
+          
+          console.log('[PLAYLIST] Now playing:', currentSong);
+          
+          // Update UI and show visualizer
+          if (data.metadata) {
+            trackName.textContent = data.metadata.title;
+            artistName.textContent = data.metadata.artist;
+            
+            if (data.metadata.coverUrl) {
+              albumCover.innerHTML = `<img src="${data.metadata.coverUrl}" alt="Cover">`;
+            } else {
+              albumCover.innerHTML = '🎵';
+            }
+          } else {
+            trackName.textContent = currentSong.replace(/\.(mp3|wav|ogg)$/i, '');
+            artistName.textContent = 'Local Music';
+            albumCover.innerHTML = '🎵';
+          }
+          
+          showVisualizer();
+        }
+      } catch (err) {
+        console.error('[PLAYLIST] Update error:', err);
+      }
+    }
+    
+    function setupAudioListeners() {
+      // Crossfade logic
+      audioPlayer.addEventListener('timeupdate', async () => {
+        if (!isPlaying) return;
+        
+        const timeLeft = audioPlayer.duration - audioPlayer.currentTime;
+        
+        if (timeLeft <= CROSSFADE_TIME && timeLeft > 0 && !crossfadeStarted) {
+          crossfadeStarted = true;
+          
+          try {
+            const res = await fetch(`${API_URL}/api/playlist/next-song`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await res.json();
+            
+            if (data.currentSong) {
+              nextSong = data.currentSong;
+              audioPlayerNext.src = `/music/${nextSong}`;
+              audioPlayerNext.volume = 0;
+              audioPlayerNext.currentTime = 0;
+              audioPlayerNext.load();
+              
+              resumeAudioContext();
+              audioPlayerNext.play().catch(e => console.error('[PLAYLIST] Next play error:', e));
+              
+              console.log('[PLAYLIST] Crossfade started to:', nextSong);
+              
+              // Fade out current, fade in next
+              const fadeInterval = setInterval(() => {
+                const progress = 1 - ((audioPlayer.duration - audioPlayer.currentTime) / CROSSFADE_TIME);
+                
+                audioPlayer.volume = Math.max(0, (currentVolume / 100) * (1 - progress));
+                audioPlayerNext.volume = Math.min(currentVolume / 100, (currentVolume / 100) * progress);
+                
+                if (progress >= 1) {
+                  clearInterval(fadeInterval);
+                }
+              }, 50);
+            }
+          } catch (err) {
+            console.error('[PLAYLIST] Crossfade error:', err);
+          }
+        }
+      });
+      
+      // When current song ends
+      audioPlayer.addEventListener('ended', () => {
+        if (nextSong) {
+          currentSong = nextSong;
+          nextSong = null;
+          
+          const tempSrc = audioPlayer.src;
+          audioPlayer.src = audioPlayerNext.src;
+          audioPlayerNext.src = '';
+          
+          audioPlayer.volume = currentVolume / 100;
+          audioPlayer.currentTime = audioPlayerNext.currentTime;
+          
+          if (isPlaying) {
+            resumeAudioContext();
+            audioPlayer.play().catch(e => console.error('[PLAYLIST] Play error:', e));
+          }
+          
+          crossfadeStarted = false;
+          
+          console.log('[PLAYLIST] Switched to next song');
+        } else {
+          fetch(`${API_URL}/api/playlist/next-song`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          }).then(() => {
+            updatePlaylist();
+          }).catch(err => console.error('[PLAYLIST] Next song error:', err));
+        }
+      });
+      
+      // Error handling
+      audioPlayer.addEventListener('error', (e) => {
+        console.error('[PLAYLIST] Audio error:', e);
+      });
+      
+      audioPlayerNext.addEventListener('error', (e) => {
+        console.error('[PLAYLIST] Audio Next error:', e);
+      });
+    }
+    
+    // ========== SPOTIFY MODE ==========
+    
+    function startSpotifyMode() {
+      console.log('[MUSIC VISUALIZER] Starting Spotify mode');
+      updateSpotify();
+      setInterval(updateSpotify, 2000);
+    }
+    
+    async function updateSpotify() {
+      try {
+        hideVisualizer();
+      } catch (err) {
+        console.error('[SPOTIFY] Update error:', err);
+      }
+    }
+    
+    // Initialize
+    checkMusicModules();
   </script>
 </body>
 </html>
