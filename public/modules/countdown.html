@@ -14,7 +14,7 @@
     "name": "Break Timer",
     "priority": 5,
     "borderColor": "#1a3a52",
-    "activeColor": "#00BCD4",
+    "activeColor": "#4CAF50",
     "hasControllerUI": true,
     "hasOverlay": true,
     "overlayUrl": "/modules/countdown.html",
@@ -36,7 +36,8 @@ if (!moduleStates.timer) {
     isRunning: false,
     isPaused: false,
     wasSkipped: false,
-    language: 'de'
+    language: 'de',
+    musicConnected: false
   };
 }
 
@@ -79,7 +80,8 @@ app.get('/api/timer', getUserFromSession, (req, res) => {
     isRunning: timerState.isRunning,
     isPaused: timerState.isPaused,
     wasSkipped: timerState.wasSkipped,
-    language: timerState.language
+    language: timerState.language,
+    musicConnected: timerState.musicConnected
   });
 });
 
@@ -117,6 +119,23 @@ app.post('/api/timer/start', getUserFromSession, (req, res) => {
   
   console.log(`[TIMER] Started: ${minutes} min (${seconds}s)`);
   console.log(`[TIMER] End time: ${new Date(getTimerEndTime()).toISOString()}`);
+  
+  // If music connected, adjust volume
+  if (timerState.musicConnected) {
+    // Check for Spotify module
+    if (moduleStates.spotify) {
+      console.log('[TIMER] Music connected - Adjusting Spotify volume to 75%');
+      // Spotify volume adjustment would go here
+    }
+    
+    // Check for Playlist module
+    if (moduleStates.playlist) {
+      const previousVolume = moduleStates.playlist.volume;
+      moduleStates.playlist.previousVolume = previousVolume;
+      moduleStates.playlist.volume = 75;
+      console.log(`[TIMER] Music connected - Adjusting Playlist volume to 75% (was ${previousVolume}%)`);
+    }
+  }
   
   const remaining = getTimerRemaining();
   const endTime = getTimerEndTime();
@@ -199,6 +218,15 @@ app.post('/api/timer/reset', getUserFromSession, (req, res) => {
   
   console.log(`[TIMER] Reset. Was skipped: ${wasRunning}`);
   
+  // Restore music volume if connected
+  if (timerState.musicConnected) {
+    if (moduleStates.playlist) {
+      const restoredVolume = moduleStates.playlist.previousVolume;
+      moduleStates.playlist.volume = restoredVolume;
+      console.log(`[TIMER] Restored Playlist volume to ${restoredVolume}%`);
+    }
+  }
+  
   res.json({
     duration: 0,
     remaining: 0,
@@ -222,6 +250,13 @@ app.post('/api/timer/language', getUserFromSession, (req, res) => {
   
   res.json({ language: timerState.language });
 });
+
+app.post('/api/timer/music-connect', getUserFromSession, (req, res) => {
+  const { connected } = req.body;
+  timerState.musicConnected = connected;
+  console.log(`[TIMER] Music connection: ${connected ? 'ON' : 'OFF'}`);
+  res.json({ musicConnected: timerState.musicConnected });
+});
   </script>
   
   <!-- ==========================================
@@ -229,19 +264,20 @@ app.post('/api/timer/language', getUserFromSession, (req, res) => {
        ========================================== -->
   <script type="text/x-controller-module">
 let timerInterval = null;
-let currentLanguage = 'de';
 let isUpdating = false;
-let spotifyModuleAvailable = false;
+let musicModuleAvailable = false;
 
-// Check if Spotify module exists
-async function checkSpotifyModule() {
+// Check if any music module exists (Spotify or Playlist)
+async function checkMusicModule() {
   try {
     const res = await fetch(`${apiUrl}/api/modules/list`);
     const data = await res.json();
-    spotifyModuleAvailable = data.modules.some(m => m.id === 'spotify');
+    musicModuleAvailable = data.modules.some(m => 
+      m.id === 'spotify' || m.id === 'playlist'
+    );
     updateMusicCheckbox();
   } catch (err) {
-    console.error('[TIMER] Error checking Spotify module:', err);
+    console.error('[TIMER] Error checking music modules:', err);
   }
 }
 
@@ -249,11 +285,11 @@ function updateMusicCheckbox() {
   const checkbox = document.getElementById('timer-music-checkbox');
   const label = document.querySelector('.timer-music-connect label');
   
-  if (!spotifyModuleAvailable) {
+  if (!musicModuleAvailable) {
     checkbox.disabled = true;
     checkbox.checked = false;
     label.style.opacity = '0.5';
-    label.title = 'Spotify module not available';
+    label.title = 'No music module available';
   } else {
     checkbox.disabled = false;
     label.style.opacity = '1';
@@ -315,22 +351,25 @@ container.innerHTML = `
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 10px;
+      padding: 8px 10px;
       background: #1a1a1a;
       border-radius: 8px;
+      width: 50%;
+      margin-left: auto;
     }
     
     .timer-music-connect input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
       cursor: pointer;
-      accent-color: #1DB954;
+      accent-color: #4CAF50;
     }
     
     .timer-music-connect label {
-      font-size: 14px;
+      font-size: 12px;
       cursor: pointer;
       user-select: none;
+      white-space: nowrap;
     }
     
     .timer-button-group {
@@ -377,57 +416,10 @@ container.innerHTML = `
       background: #da190b;
     }
     
-    .timer-language-buttons {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 15px;
-    }
-    
-    .timer-btn-language {
-      flex: 1;
-      padding: 0;
-      border: 2px solid #3a3a3a;
-      border-radius: 8px;
-      cursor: pointer;
-      background: #1a1a1a;
-      transition: all 0.3s;
-      overflow: hidden;
-      height: 60px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    
-    .timer-btn-language.active {
-      border-color: #FF9800;
-      background: #2a2a2a;
-      box-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
-    }
-    
-    .timer-btn-language:hover {
-      background: #2a2a2a;
-    }
-    
-    .timer-flag-img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    
     .hidden {
       display: none !important;
     }
   </style>
-  
-  <div class="timer-language-buttons">
-    <button class="timer-btn-language active" id="timer-btn-german" data-lang="de">
-      <img src="/assets/de.webp" alt="Deutsch" class="timer-flag-img">
-    </button>
-    <button class="timer-btn-language" id="timer-btn-english" data-lang="en">
-      <img src="/assets/en.webp" alt="English" class="timer-flag-img">
-    </button>
-  </div>
   
   <div class="timer-preview">
     <div class="timer-preview-time" id="timer-preview-time">00:00</div>
@@ -441,7 +433,7 @@ container.innerHTML = `
   
   <div class="timer-music-connect">
     <input type="checkbox" id="timer-music-checkbox">
-    <label for="timer-music-checkbox">🎵 Connect to Music</label>
+    <label for="timer-music-checkbox">🎵 Music</label>
   </div>
   
   <div class="timer-button-group">
@@ -458,8 +450,7 @@ const timeInput = document.getElementById('timer-time-input');
 const startBtn = document.getElementById('timer-start-btn');
 const pauseBtn = document.getElementById('timer-pause-btn');
 const resetBtn = document.getElementById('timer-reset-btn');
-const btnGerman = document.getElementById('timer-btn-german');
-const btnEnglish = document.getElementById('timer-btn-english');
+const musicCheckbox = document.getElementById('timer-music-checkbox');
 
 // Update UI function
 async function updateTimerUI() {
@@ -502,14 +493,8 @@ async function updateTimerUI() {
       resetBtn.classList.add('hidden');
     }
     
-    // Update language buttons
-    if (timer.language === 'de') {
-      btnGerman.classList.add('active');
-      btnEnglish.classList.remove('active');
-    } else {
-      btnEnglish.classList.add('active');
-      btnGerman.classList.remove('active');
-    }
+    // Update music checkbox state
+    musicCheckbox.checked = timer.musicConnected || false;
   } catch (err) {
     console.error('[TIMER] Update error:', err);
   }
@@ -574,42 +559,22 @@ resetBtn.addEventListener('click', async () => {
   }
 });
 
-btnGerman.addEventListener('click', async () => {
-  currentLanguage = 'de';
-  btnGerman.classList.add('active');
-  btnEnglish.classList.remove('active');
-  
+musicCheckbox.addEventListener('change', async (e) => {
   try {
-    await fetch(`${apiUrl}/api/timer/language`, {
+    await fetch(`${apiUrl}/api/timer/music-connect`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ language: 'de' })
+      body: JSON.stringify({ connected: e.target.checked })
     });
   } catch (err) {
-    console.error('[TIMER] Language change error:', err);
-  }
-});
-
-btnEnglish.addEventListener('click', async () => {
-  currentLanguage = 'en';
-  btnEnglish.classList.add('active');
-  btnGerman.classList.remove('active');
-  
-  try {
-    await fetch(`${apiUrl}/api/timer/language`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ language: 'en' })
-    });
-  } catch (err) {
-    console.error('[TIMER] Language change error:', err);
+    console.error('[TIMER] Music connect error:', err);
   }
 });
 
 // Start polling
 timerInterval = setInterval(updateTimerUI, 1000);
 updateTimerUI();
-checkSpotifyModule();
+checkMusicModule();
 
 // Return module instance
 return {
