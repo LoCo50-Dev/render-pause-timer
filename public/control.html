@@ -155,6 +155,48 @@
       color: white;
     }
     
+    /* ========== LANGUAGE SELECTOR ========== */
+    
+    .language-selector {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      display: flex;
+      gap: 8px;
+      z-index: 1000;
+    }
+    
+    .btn-language {
+      padding: 0;
+      border: 2px solid #3a3a3a;
+      border-radius: 8px;
+      cursor: pointer;
+      background: #2a2a2a;
+      transition: all 0.3s;
+      overflow: hidden;
+      width: 50px;
+      height: 35px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .btn-language.active {
+      border-color: #FF9800;
+      box-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
+    }
+    
+    .btn-language:hover {
+      background: #3a3a3a;
+    }
+    
+    .flag-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    
     /* ========== MAIN CONTAINER ========== */
     
     .container {
@@ -279,6 +321,16 @@
     </div>
   </div>
 
+  <!-- ========== LANGUAGE SELECTOR ========== -->
+  <div class="language-selector hidden" id="languageSelector">
+    <button class="btn-language active" id="btn-german" data-lang="de">
+      <img src="/assets/de.webp" alt="Deutsch" class="flag-img">
+    </button>
+    <button class="btn-language" id="btn-english" data-lang="en">
+      <img src="/assets/en.webp" alt="English" class="flag-img">
+    </button>
+  </div>
+
   <!-- ========== MAIN CONTAINER (Modules load here) ========== -->
   <div class="container hidden" id="mainContainer">
     <div class="loading">Loading modules...</div>
@@ -288,6 +340,7 @@
     const API_URL = window.location.origin;
     let sessionId = null;
     let loadedModules = [];
+    let currentLanguage = 'de';
     
     // ========== DOM ELEMENTS ==========
     const loginScreen = document.getElementById('loginScreen');
@@ -298,6 +351,9 @@
     const userProfileBox = document.getElementById('userProfileBox');
     const userAvatar = document.getElementById('userAvatar');
     const userName = document.getElementById('userName');
+    const languageSelector = document.getElementById('languageSelector');
+    const btnGerman = document.getElementById('btn-german');
+    const btnEnglish = document.getElementById('btn-english');
     
     // ========== UTILITY FUNCTIONS ==========
     
@@ -313,6 +369,34 @@
       }
       return headers;
     }
+    
+    // ========== LANGUAGE FUNCTIONS ==========
+    
+    async function changeLanguage(lang) {
+      currentLanguage = lang;
+      
+      if (lang === 'de') {
+        btnGerman.classList.add('active');
+        btnEnglish.classList.remove('active');
+      } else {
+        btnEnglish.classList.add('active');
+        btnGerman.classList.remove('active');
+      }
+      
+      // Update timer language if timer module exists
+      try {
+        await fetch(`${API_URL}/api/timer/language`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ language: lang })
+        });
+      } catch (err) {
+        // Timer module might not exist, ignore error
+      }
+    }
+    
+    btnGerman.addEventListener('click', () => changeLanguage('de'));
+    btnEnglish.addEventListener('click', () => changeLanguage('en'));
     
     // ========== AUTH FUNCTIONS ==========
     
@@ -559,6 +643,7 @@
       loginScreen.classList.add('hidden');
       mainContainer.classList.remove('hidden');
       userProfileBox.classList.remove('hidden');
+      languageSelector.classList.remove('hidden');
       
       if (user) {
         userName.textContent = user.name;
