@@ -3,7 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Now Playing</title>
+  <title>Music Visualizer</title>
+  
+  <!-- ==========================================
+       MODULE CONFIGURATION
+       ========================================== -->
+  <script type="application/json" id="module-config">
+  {
+    "id": "music-visualizer",
+    "name": "Music Visualizer",
+    "priority": 999,
+    "hasControllerUI": false,
+    "hasOverlay": true,
+    "overlayUrl": "/modules/music-visualizer.html",
+    "dependencies": []
+  }
+  </script>
+  
+  <!-- ==========================================
+       OBS OVERLAY STYLES
+       ========================================== -->
   <style>
     * {
       margin: 0;
@@ -20,6 +39,7 @@
       align-items: center;
       min-height: 100vh;
       padding: 20px;
+      overflow: hidden;
     }
     
     .now-playing {
@@ -43,9 +63,13 @@
       width: 100px;
       height: 100px;
       border-radius: 12px;
-      background: #1a1a1a;
+      background: linear-gradient(135deg, #1DB954, #1ed760);
       flex-shrink: 0;
       overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
     }
     
     .album-cover img {
@@ -76,177 +100,267 @@
       text-overflow: ellipsis;
     }
     
-    .spotify-logo {
+    .music-logo {
       font-size: 12px;
       opacity: 0.5;
       margin-top: 8px;
     }
     
-    .error-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.9);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 9999;
-    }
-    
-    .error-box {
-      background: #2a2a2a;
-      border: 2px solid #f44336;
-      border-radius: 15px;
-      padding: 30px;
-      max-width: 400px;
-      text-align: center;
-    }
-    
-    .error-box h2 {
-      color: #f44336;
-      margin-bottom: 15px;
-      font-size: 24px;
-    }
-    
-    .error-box p {
-      opacity: 0.8;
-      line-height: 1.6;
-      margin-bottom: 10px;
-    }
-    
-    .error-box .error-icon {
-      font-size: 48px;
-      margin-bottom: 15px;
-    }
-    
     .hidden {
       display: none !important;
+    }
+    
+    /* Audio player hidden */
+    #audio-player, #audio-player-next {
+      display: none;
     }
   </style>
 </head>
 <body>
-  <!-- Error Overlay (shown if Spotify module not available) -->
-  <div class="error-overlay hidden" id="errorOverlay">
-    <div class="error-box">
-      <div class="error-icon">⚠️</div>
-      <h2>Spotify Module Required</h2>
-      <p>This overlay requires the Spotify module to be available.</p>
-      <p>Make sure <strong>spotify.html</strong> is in the <strong>/public/modules/</strong> folder.</p>
-    </div>
-  </div>
+  <!-- Audio players for Playlist module -->
+  <audio id="audio-player" preload="auto"></audio>
+  <audio id="audio-player-next" preload="auto"></audio>
 
   <!-- Now Playing Display -->
   <div class="now-playing" id="nowPlaying">
     <div class="album-cover" id="albumCover">
-      <img src="" alt="Album Cover" id="coverImage">
+      🎵
     </div>
     <div class="track-info">
-      <div class="track-name" id="trackName">Kein Song aktiv</div>
-      <div class="artist-name" id="artistName">Starte Musik in Spotify</div>
-      <div class="spotify-logo">🎵 Spotify</div>
+      <div class="track-name" id="trackName">No music playing</div>
+      <div class="artist-name" id="artistName">Start music to see info</div>
+      <div class="music-logo" id="musicSource">🎵 Music</div>
     </div>
   </div>
 
+  <!-- ==========================================
+       OBS OVERLAY SCRIPT
+       ========================================== -->
   <script>
     const API_URL = window.location.origin;
     
-    const errorOverlay = document.getElementById('errorOverlay');
     const nowPlaying = document.getElementById('nowPlaying');
-    const coverImage = document.getElementById('coverImage');
+    const albumCover = document.getElementById('albumCover');
     const trackName = document.getElementById('trackName');
     const artistName = document.getElementById('artistName');
+    const musicSource = document.getElementById('musicSource');
     
+    // Audio players for playlist
+    const audioPlayer = document.getElementById('audio-player');
+    const audioPlayerNext = document.getElementById('audio-player-next');
+    
+    let activeModule = null; // 'spotify' or 'playlist'
     let lastTrack = null;
-    let spotifyModuleAvailable = false;
-    let checkAttempts = 0;
-    const MAX_CHECK_ATTEMPTS = 3;
+    let spotifyAvailable = false;
+    let playlistAvailable = false;
     
-    // Check if Spotify module exists
-    async function checkSpotifyModule() {
+    // Playlist specific state
+    let currentSong = null;
+    let nextSong = null;
+    let currentVolume = 50;
+    let crossfadeStarted = false;
+    let isPlaying = false;
+    const CROSSFADE_TIME = 5; // seconds
+    
+    // Check which music modules are available
+    async function checkMusicModules() {
       try {
         const res = await fetch(`${API_URL}/api/modules/list`);
         const data = await res.json();
         
-        spotifyModuleAvailable = data.modules.some(m => m.id === 'spotify');
+        spotifyAvailable = data.modules.some(m => m.id === 'spotify');
+        playlistAvailable = data.modules.some(m => m.id === 'playlist');
         
-        if (!spotifyModuleAvailable) {
-          console.error('[MUSIC VISUALIZER] Spotify module not found');
-          showError();
+        console.log('[MUSIC VISUALIZER] Spotify available:', spotifyAvailable);
+        console.log('[MUSIC VISUALIZER] Playlist available:', playlistAvailable);
+        
+        // Determine active module
+        if (playlistAvailable) {
+          activeModule = 'playlist';
+          musicSource.textContent = '🎵 Playlist';
+          startPlaylistMode();
+        } else if (spotifyAvailable) {
+          activeModule = 'spotify';
+          musicSource.textContent = '🎵 Spotify';
+          startSpotifyMode();
         } else {
-          console.log('[MUSIC VISUALIZER] Spotify module detected');
-          hideError();
-          startPolling();
+          console.warn('[MUSIC VISUALIZER] No music modules available');
         }
       } catch (err) {
         console.error('[MUSIC VISUALIZER] Error checking modules:', err);
-        checkAttempts++;
-        
-        if (checkAttempts >= MAX_CHECK_ATTEMPTS) {
-          showError();
-        } else {
-          // Retry after 2 seconds
-          setTimeout(checkSpotifyModule, 2000);
-        }
       }
     }
     
-    function showError() {
-      errorOverlay.classList.remove('hidden');
-      nowPlaying.classList.remove('visible');
-    }
+    // ========== PLAYLIST MODE ==========
     
-    function hideError() {
-      errorOverlay.classList.add('hidden');
-    }
-    
-    // Update now playing info
-    async function updateNowPlaying() {
-      if (!spotifyModuleAvailable) return;
+    function startPlaylistMode() {
+      console.log('[MUSIC VISUALIZER] Starting Playlist mode');
+      updatePlaylist();
+      setInterval(updatePlaylist, 1000);
       
+      // Setup audio event listeners
+      setupAudioListeners();
+    }
+    
+    async function updatePlaylist() {
       try {
-        // Try to get current track from Spotify API
-        // Note: This would need a public endpoint or different approach
-        // For now, we'll just show a placeholder
-        
-        // In a real implementation, you'd need to add a public endpoint
-        // like /api/spotify/current/public that doesn't require auth
-        
-        const res = await fetch(`${API_URL}/api/spotify/state`);
-        
-        if (res.status === 401) {
-          // Not authenticated - show default message
-          nowPlaying.classList.remove('visible');
-          return;
-        }
-        
+        const res = await fetch(`${API_URL}/api/playlist/public`);
         const data = await res.json();
         
-        if (data.error || !data.connected) {
-          nowPlaying.classList.remove('visible');
-          return;
+        // Update volume
+        if (data.volume !== currentVolume) {
+          currentVolume = data.volume;
+          audioPlayer.volume = currentVolume / 100;
+          audioPlayerNext.volume = 0;
         }
         
-        // If we have track data, show it
-        // This part needs to be implemented based on your Spotify API setup
-        // For now, just show that Spotify is connected
+        // Update playing state
+        if (data.isPlaying !== isPlaying) {
+          isPlaying = data.isPlaying;
+          
+          if (isPlaying) {
+            audioPlayer.play().catch(e => console.error('[PLAYLIST] Play error:', e));
+          } else {
+            audioPlayer.pause();
+            audioPlayerNext.pause();
+          }
+        }
         
-        nowPlaying.classList.add('visible');
+        // Update current song
+        if (data.currentSong && data.currentSong !== currentSong) {
+          currentSong = data.currentSong;
+          audioPlayer.src = `/music/${currentSong}`;
+          audioPlayer.volume = currentVolume / 100;
+          crossfadeStarted = false;
+          
+          if (isPlaying) {
+            audioPlayer.play().catch(e => console.error('[PLAYLIST] Play error:', e));
+          }
+          
+          console.log('[PLAYLIST] Now playing:', currentSong);
+        }
         
+        // Update UI
+        if (data.metadata && data.isPlaying) {
+          trackName.textContent = data.metadata.title;
+          artistName.textContent = data.metadata.artist;
+          albumCover.innerHTML = '🎵';
+          nowPlaying.classList.add('visible');
+        } else if (data.currentSong && data.isPlaying) {
+          trackName.textContent = data.currentSong.replace(/\.(mp3|wav|ogg)$/i, '');
+          artistName.textContent = 'Local Music';
+          albumCover.innerHTML = '🎵';
+          nowPlaying.classList.add('visible');
+        } else {
+          nowPlaying.classList.remove('visible');
+        }
       } catch (err) {
-        console.error('[MUSIC VISUALIZER] Error fetching track:', err);
+        console.error('[PLAYLIST] Update error:', err);
         nowPlaying.classList.remove('visible');
       }
     }
     
-    function startPolling() {
-      updateNowPlaying();
-      setInterval(updateNowPlaying, 2000);
+    function setupAudioListeners() {
+      // Crossfade logic
+      audioPlayer.addEventListener('timeupdate', async () => {
+        if (!isPlaying) return;
+        
+        const timeLeft = audioPlayer.duration - audioPlayer.currentTime;
+        
+        // Start crossfade 5 seconds before end
+        if (timeLeft <= CROSSFADE_TIME && timeLeft > 0 && !crossfadeStarted) {
+          crossfadeStarted = true;
+          
+          try {
+            // Request next song
+            const res = await fetch(`${API_URL}/api/playlist/next-song`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await res.json();
+            
+            if (data.currentSong) {
+              nextSong = data.currentSong;
+              audioPlayerNext.src = `/music/${nextSong}`;
+              audioPlayerNext.volume = 0;
+              audioPlayerNext.currentTime = 0;
+              
+              // Start next song
+              audioPlayerNext.play().catch(e => console.error('[PLAYLIST] Next play error:', e));
+              
+              console.log('[PLAYLIST] Crossfade started to:', nextSong);
+              
+              // Fade out current, fade in next
+              const fadeInterval = setInterval(() => {
+                const progress = 1 - ((audioPlayer.duration - audioPlayer.currentTime) / CROSSFADE_TIME);
+                
+                audioPlayer.volume = Math.max(0, (currentVolume / 100) * (1 - progress));
+                audioPlayerNext.volume = Math.min(currentVolume / 100, (currentVolume / 100) * progress);
+                
+                if (progress >= 1) {
+                  clearInterval(fadeInterval);
+                }
+              }, 100);
+            }
+          } catch (err) {
+            console.error('[PLAYLIST] Crossfade error:', err);
+          }
+        }
+      });
+      
+      // When current song ends, switch to next
+      audioPlayer.addEventListener('ended', () => {
+        if (nextSong) {
+          currentSong = nextSong;
+          nextSong = null;
+          
+          // Swap players
+          const tempSrc = audioPlayer.src;
+          audioPlayer.src = audioPlayerNext.src;
+          audioPlayerNext.src = '';
+          
+          audioPlayer.volume = currentVolume / 100;
+          audioPlayer.currentTime = audioPlayerNext.currentTime;
+          
+          if (isPlaying) {
+            audioPlayer.play().catch(e => console.error('[PLAYLIST] Play error:', e));
+          }
+          
+          crossfadeStarted = false;
+          
+          console.log('[PLAYLIST] Switched to next song');
+        } else {
+          // No crossfade happened, just go to next song
+          fetch(`${API_URL}/api/playlist/next-song`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          }).then(() => {
+            updatePlaylist();
+          }).catch(err => console.error('[PLAYLIST] Next song error:', err));
+        }
+      });
+    }
+    
+    // ========== SPOTIFY MODE ==========
+    
+    function startSpotifyMode() {
+      console.log('[MUSIC VISUALIZER] Starting Spotify mode');
+      updateSpotify();
+      setInterval(updateSpotify, 2000);
+    }
+    
+    async function updateSpotify() {
+      try {
+        // This would need to be implemented based on your Spotify API
+        // For now, just hide the overlay
+        nowPlaying.classList.remove('visible');
+      } catch (err) {
+        console.error('[SPOTIFY] Update error:', err);
+      }
     }
     
     // Initialize
-    checkSpotifyModule();
+    checkMusicModules();
   </script>
 </body>
 </html>
