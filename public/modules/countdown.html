@@ -225,6 +225,11 @@ app.post('/api/timer/reset', getUserFromSession, (req, res) => {
       moduleStates.playlist.volume = restoredVolume;
       console.log(`[TIMER] Restored Playlist volume to ${restoredVolume}%`);
     }
+    if (moduleStates.spotify) {
+      const restoredVolume = moduleStates.spotify.previousVolume || 50;
+      moduleStates.spotify.volume = restoredVolume;
+      console.log(`[TIMER] Restored Spotify volume to ${restoredVolume}%`);
+    }
   }
   
   res.json({
@@ -491,6 +496,19 @@ async function updateTimerUI() {
       startBtn.classList.remove('hidden');
       pauseBtn.classList.add('hidden');
       resetBtn.classList.add('hidden');
+      
+      // Auto-restore volume when timer naturally expires
+      if (timer.musicConnected && !timer.isRunning && timer.remaining === 0) {
+        try {
+          await fetch(`${apiUrl}/api/playlist/restore-volume`, {
+            method: 'POST',
+            headers: getHeaders()
+          });
+          console.log('[TIMER] Auto-restored music volume');
+        } catch (err) {
+          // Playlist module might not exist
+        }
+      }
     }
     
     // Update music checkbox state
