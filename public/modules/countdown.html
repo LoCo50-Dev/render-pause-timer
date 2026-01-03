@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Countdown Timer</title>
+  <title>Break Timer</title>
   
   <!-- ==========================================
        MODULE CONFIGURATION
@@ -14,7 +14,7 @@
     "name": "Break Timer",
     "priority": 5,
     "borderColor": "#1a3a52",
-    "activeColor": "#4CAF50",
+    "activeColor": "#00BCD4",
     "hasControllerUI": true,
     "hasOverlay": true,
     "overlayUrl": "/modules/countdown.html",
@@ -120,20 +120,24 @@ app.post('/api/timer/start', getUserFromSession, (req, res) => {
   console.log(`[TIMER] Started: ${minutes} min (${seconds}s)`);
   console.log(`[TIMER] End time: ${new Date(getTimerEndTime()).toISOString()}`);
   
-  // If music connected, adjust volume
+  // If music connected, trigger fade UP
   if (timerState.musicConnected) {
-    // Check for Spotify module
-    if (moduleStates.spotify) {
-      console.log('[TIMER] Music connected - Adjusting Spotify volume to 75%');
-      // Spotify volume adjustment would go here
+    if (moduleStates.playlist && moduleStates.playlist.volume !== undefined) {
+      const currentVol = moduleStates.playlist.volume;
+      moduleStates.playlist.previousVolume = currentVol;
+      moduleStates.playlist.targetVolume = 75;
+      moduleStates.playlist.fadeStartTime = Date.now();
+      moduleStates.playlist.fadeDirection = 'up';
+      console.log(`[TIMER] Triggering Playlist fade UP: ${currentVol}% → 75%`);
     }
     
-    // Check for Playlist module
-    if (moduleStates.playlist) {
-      const previousVolume = moduleStates.playlist.volume;
-      moduleStates.playlist.previousVolume = previousVolume;
-      moduleStates.playlist.volume = 75;
-      console.log(`[TIMER] Music connected - Adjusting Playlist volume to 75% (was ${previousVolume}%)`);
+    if (moduleStates.spotify && moduleStates.spotify.volume !== undefined) {
+      const currentVol = moduleStates.spotify.volume;
+      moduleStates.spotify.previousVolume = currentVol;
+      moduleStates.spotify.targetVolume = 75;
+      moduleStates.spotify.fadeStartTime = Date.now();
+      moduleStates.spotify.fadeDirection = 'up';
+      console.log(`[TIMER] Triggering Spotify fade UP: ${currentVol}% → 75%`);
     }
   }
   
@@ -218,17 +222,21 @@ app.post('/api/timer/reset', getUserFromSession, (req, res) => {
   
   console.log(`[TIMER] Reset. Was skipped: ${wasRunning}`);
   
-  // Restore music volume if connected
+  // Trigger fade DOWN to restore volume
   if (timerState.musicConnected) {
-    if (moduleStates.playlist) {
-      const restoredVolume = moduleStates.playlist.previousVolume;
-      moduleStates.playlist.volume = restoredVolume;
-      console.log(`[TIMER] Restored Playlist volume to ${restoredVolume}%`);
+    if (moduleStates.playlist && moduleStates.playlist.previousVolume !== undefined) {
+      const targetVol = moduleStates.playlist.previousVolume;
+      moduleStates.playlist.targetVolume = targetVol;
+      moduleStates.playlist.fadeStartTime = Date.now();
+      moduleStates.playlist.fadeDirection = 'down';
+      console.log(`[TIMER] Triggering Playlist fade DOWN to ${targetVol}%`);
     }
-    if (moduleStates.spotify) {
-      const restoredVolume = moduleStates.spotify.previousVolume || 50;
-      moduleStates.spotify.volume = restoredVolume;
-      console.log(`[TIMER] Restored Spotify volume to ${restoredVolume}%`);
+    if (moduleStates.spotify && moduleStates.spotify.previousVolume !== undefined) {
+      const targetVol = moduleStates.spotify.previousVolume;
+      moduleStates.spotify.targetVolume = targetVol;
+      moduleStates.spotify.fadeStartTime = Date.now();
+      moduleStates.spotify.fadeDirection = 'down';
+      console.log(`[TIMER] Triggering Spotify fade DOWN to ${targetVol}%`);
     }
   }
   
@@ -272,33 +280,28 @@ let timerInterval = null;
 let isUpdating = false;
 let musicModuleAvailable = false;
 
-// Check if any music module exists (Spotify or Playlist)
+// Check if any music module exists
 async function checkMusicModule() {
   try {
     const res = await fetch(`${apiUrl}/api/modules/list`);
     const data = await res.json();
     musicModuleAvailable = data.modules.some(m => 
-      m.id === 'spotify' || m.id === 'playlist'
+      m.musicModule === true && m.hasControllerUI !== false
     );
-    updateMusicCheckbox();
+    updateUI();
   } catch (err) {
     console.error('[TIMER] Error checking music modules:', err);
   }
 }
 
-function updateMusicCheckbox() {
-  const checkbox = document.getElementById('timer-music-checkbox');
-  const label = document.querySelector('.timer-music-connect label');
+function updateUI() {
+  const musicCheckbox = document.getElementById('timer-music-checkbox');
+  const musicConnect = document.querySelector('.timer-music-connect');
   
-  if (!musicModuleAvailable) {
-    checkbox.disabled = true;
-    checkbox.checked = false;
-    label.style.opacity = '0.5';
-    label.title = 'No music module available';
-  } else {
-    checkbox.disabled = false;
-    label.style.opacity = '1';
-    label.title = '';
+  if (!musicModuleAvailable && musicConnect) {
+    musicConnect.style.display = 'none';
+  } else if (musicConnect) {
+    musicConnect.style.display = 'flex';
   }
 }
 
@@ -348,7 +351,7 @@ container.innerHTML = `
     
     .timer-input-group input:focus {
       outline: none;
-      border-color: #4CAF50;
+      border-color: #00BCD4;
     }
     
     .timer-music-connect {
@@ -367,7 +370,7 @@ container.innerHTML = `
       width: 16px;
       height: 16px;
       cursor: pointer;
-      accent-color: #4CAF50;
+      accent-color: #00BCD4;
     }
     
     .timer-music-connect label {
@@ -428,7 +431,7 @@ container.innerHTML = `
   
   <div class="timer-preview">
     <div class="timer-preview-time" id="timer-preview-time">00:00</div>
-    <div class="timer-preview-end" id="timer-preview-end">Resume: --:-- Uhr</div>
+    <div class="timer-preview-end" id="timer-preview-end">Resume: --:-- </div>
   </div>
   
   <div class="timer-input-group">
@@ -474,7 +477,7 @@ async function updateTimerUI() {
         const endDate = new Date(timer.endTime);
         const hours = endDate.getHours().toString().padStart(2, '0');
         const minutes = endDate.getMinutes().toString().padStart(2, '0');
-        previewEnd.textContent = `Resume: ${hours}:${minutes} Uhr`;
+        previewEnd.textContent = `Resume: ${hours}:${minutes}`;
       } else {
         previewEnd.textContent = 'Paused';
       }
@@ -491,27 +494,26 @@ async function updateTimerUI() {
       }
     } else {
       previewTime.textContent = '00:00';
-      previewEnd.textContent = 'Resume: --:-- Uhr';
+      previewEnd.textContent = 'Resume: --:--';
       panel.style.borderColor = moduleConfig.borderColor;
       startBtn.classList.remove('hidden');
       pauseBtn.classList.add('hidden');
       resetBtn.classList.add('hidden');
       
-      // Auto-restore volume when timer naturally expires
+      // Auto-restore on natural expiration
       if (timer.musicConnected && !timer.isRunning && timer.remaining === 0) {
         try {
-          await fetch(`${apiUrl}/api/playlist/restore-volume`, {
+          await fetch(`${apiUrl}/api/timer/reset`, {
             method: 'POST',
             headers: getHeaders()
           });
-          console.log('[TIMER] Auto-restored music volume');
+          console.log('[TIMER] Auto-triggered fade DOWN');
         } catch (err) {
-          // Playlist module might not exist
+          console.error('[TIMER] Auto-restore error:', err);
         }
       }
     }
     
-    // Update music checkbox state
     musicCheckbox.checked = timer.musicConnected || false;
   } catch (err) {
     console.error('[TIMER] Update error:', err);
@@ -589,7 +591,7 @@ musicCheckbox.addEventListener('change', async (e) => {
   }
 });
 
-// Start polling
+// Initialize
 timerInterval = setInterval(updateTimerUI, 1000);
 updateTimerUI();
 checkMusicModule();
@@ -653,7 +655,7 @@ return {
     
     .countdown-bar-fill {
       height: 100%;
-      background: linear-gradient(90deg, #4CAF50, #8BC34A);
+      background: linear-gradient(90deg, #00BCD4, #00E5FF);
       transition: width 0.5s linear;
       border-radius: 10px;
     }
@@ -708,22 +710,16 @@ return {
   </style>
 </head>
 <body>
-  <!-- ==========================================
-       OBS OVERLAY HTML
-       ========================================== -->
   <div class="countdown-container">
     <div class="countdown-time" id="countdownTime">00:00</div>
-    <div class="countdown-message hidden" id="countdownMessage">Stream setzt gleich fort</div>
+    <div class="countdown-message hidden" id="countdownMessage">Stream continues shortly</div>
     <div class="countdown-bar">
       <div class="countdown-bar-fill" id="countdownBar"></div>
     </div>
-    <div class="countdown-end" id="countdownEnd">Ungefähr um --:-- Uhr</div>
-    <div class="countdown-skipped hidden" id="countdownSkipped">Pause wurde übersprungen</div>
+    <div class="countdown-end" id="countdownEnd">Around --:--</div>
+    <div class="countdown-skipped hidden" id="countdownSkipped">Break was skipped</div>
   </div>
 
-  <!-- ==========================================
-       OBS OVERLAY SCRIPT
-       ========================================== -->
   <script>
     const API_URL = window.location.origin;
     
@@ -742,13 +738,13 @@ return {
       },
       en: {
         around: 'Around',
-        clock: "o'clock",
+        clock: "",
         skipped: 'Break was skipped',
         starting: 'Stream continues shortly'
       }
     };
     
-    let currentLang = 'de';
+    let currentLang = 'en';
     let messageShownAt = null;
     let skippedShownAt = null;
     
@@ -757,7 +753,7 @@ return {
         const res = await fetch(`${API_URL}/api/timer/public`);
         const timer = await res.json();
         
-        currentLang = timer.language || 'de';
+        currentLang = timer.language || 'en';
         
         if (timer.isRunning && timer.remaining > 0) {
           const mins = Math.floor(timer.remaining / 60);
