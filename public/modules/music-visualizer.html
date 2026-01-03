@@ -51,21 +51,21 @@
       max-width: 1200px;
       box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
       
-      /* Rainbow border - ANIMATED like Control */
+      /* Rainbow border - ANIMATED FLOWING */
       padding: 5px;
       border-radius: 25px;
       background: linear-gradient(
         90deg,
         #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3,
-        #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000
+        #ff0000
       );
-      background-size: 300% 100%;
-      animation: rainbow-flow 15s linear infinite;
+      background-size: 200% 100%;
+      animation: rainbow-flow 8s linear infinite;
     }
     
     @keyframes rainbow-flow {
       0% { background-position: 0% 0%; }
-      100% { background-position: 300% 0%; }
+      100% { background-position: 200% 0%; }
     }
     
     .now-playing-inner {
