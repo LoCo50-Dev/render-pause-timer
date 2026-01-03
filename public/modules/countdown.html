@@ -302,6 +302,10 @@ function updateUI() {
     musicConnect.style.display = 'none';
   } else if (musicConnect) {
     musicConnect.style.display = 'flex';
+    
+    if (musicCheckbox) {
+      musicCheckbox.disabled = false;
+    }
   }
 }
 
