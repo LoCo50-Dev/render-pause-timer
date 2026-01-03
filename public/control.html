@@ -690,7 +690,8 @@
         conflict.modules.forEach(mod => {
           const btn = document.createElement('button');
           btn.className = `btn-module-choice ${mod.id}`;
-          btn.textContent = mod.name;
+          // Use module ID (filename without .html) instead of name
+          btn.textContent = mod.id.charAt(0).toUpperCase() + mod.id.slice(1);
           btn.addEventListener('click', () => {
             selectModule(conflict.priority, mod);
           });
