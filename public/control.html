@@ -202,42 +202,55 @@
     .module-choices-container {
       width: 100%;
       max-width: 320px;
-      margin-top: 80px;
-      margin-bottom: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
     }
     
-    .module-choice-group {
+    .module-choice-panel {
       background: #2a2a2a;
-      border-radius: 12px;
-      padding: 15px;
-      margin-bottom: 15px;
+      border-radius: 15px;
+      padding: 18px;
+      width: 100%;
       box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      border: 2px solid #3a3a3a;
+      transition: opacity 0.3s, transform 0.3s;
+    }
+    
+    .module-choice-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 15px;
+      padding: 0;
+    }
+    
+    .module-choice-icon {
+      font-size: 20px;
+      line-height: 1;
     }
     
     .module-choice-title {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: bold;
-      margin-bottom: 12px;
-      text-align: center;
       opacity: 0.9;
+      line-height: 1;
     }
     
     .module-choice-buttons {
       display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      justify-content: center;
+      gap: 10px;
+      flex-direction: column;
     }
     
     .btn-module-choice {
-      flex: 1;
-      min-width: 80px;
-      padding: 10px 15px;
+      width: 100%;
+      padding: 15px;
       background: #3a3a3a;
       color: white;
       border: 2px solid #555;
       border-radius: 8px;
-      font-size: 13px;
+      font-size: 15px;
       font-weight: bold;
       cursor: pointer;
       transition: all 0.3s;
@@ -266,12 +279,6 @@
     .btn-module-choice.playlist:hover {
       background: #9C27B0;
       border-color: #9C27B0;
-    }
-    
-    .module-choice-divider {
-      height: 1px;
-      background: linear-gradient(90deg, transparent, #555, transparent);
-      margin: 15px 0;
     }
     
     /* ========== MAIN CONTAINER ========== */
@@ -559,18 +566,16 @@
     // ========== MODULE CHOICE UI ==========
     
     function getCategoryName(modules) {
-      // Determine category based on module IDs
       const ids = modules.map(m => m.id);
       
       if (ids.includes('spotify') || ids.includes('playlist')) {
-        return 'Music';
+        return { name: 'Music', icon: '🎵' };
       }
       if (ids.includes('timer') || ids.includes('countdown')) {
-        return 'Timer';
+        return { name: 'Timer', icon: '⏱️' };
       }
       
-      // Fallback: use first module's name
-      return modules[0].name || 'Module';
+      return { name: modules[0].name || 'Module', icon: '⚙️' };
     }
     
     function renderModuleChoices() {
@@ -583,17 +588,20 @@
       
       moduleChoicesContainer.classList.remove('hidden');
       
-      pendingConflicts.forEach((conflict, index) => {
-        const group = document.createElement('div');
-        group.className = 'module-choice-group';
-        group.id = `choice-group-${conflict.priority}`;
+      pendingConflicts.forEach((conflict) => {
+        const panel = document.createElement('div');
+        panel.className = 'module-choice-panel';
+        panel.id = `choice-panel-${conflict.priority}`;
         
         const category = getCategoryName(conflict.modules);
         
-        const title = document.createElement('div');
-        title.className = 'module-choice-title';
-        title.textContent = category;
-        group.appendChild(title);
+        const header = document.createElement('div');
+        header.className = 'module-choice-header';
+        header.innerHTML = `
+          <span class="module-choice-icon">${category.icon}</span>
+          <span class="module-choice-title">${category.name}</span>
+        `;
+        panel.appendChild(header);
         
         const buttonsContainer = document.createElement('div');
         buttonsContainer.className = 'module-choice-buttons';
@@ -608,16 +616,8 @@
           buttonsContainer.appendChild(btn);
         });
         
-        group.appendChild(buttonsContainer);
-        
-        // Add divider if not last
-        if (index < pendingConflicts.length - 1) {
-          const divider = document.createElement('div');
-          divider.className = 'module-choice-divider';
-          group.appendChild(divider);
-        }
-        
-        moduleChoicesContainer.appendChild(group);
+        panel.appendChild(buttonsContainer);
+        moduleChoicesContainer.appendChild(panel);
       });
     }
     
@@ -626,19 +626,15 @@
       
       moduleChoices[priority] = module.id;
       
-      // Remove from pending
       pendingConflicts = pendingConflicts.filter(c => c.priority !== priority);
       
-      // Remove the choice group with animation
-      const group = document.getElementById(`choice-group-${priority}`);
-      if (group) {
-        group.style.transition = 'opacity 0.3s, transform 0.3s';
-        group.style.opacity = '0';
-        group.style.transform = 'scale(0.9)';
+      const panel = document.getElementById(`choice-panel-${priority}`);
+      if (panel) {
+        panel.style.opacity = '0';
+        panel.style.transform = 'scale(0.95)';
         setTimeout(() => {
-          group.remove();
+          panel.remove();
           
-          // If no more conflicts, hide container and load modules
           if (pendingConflicts.length === 0) {
             moduleChoicesContainer.classList.add('hidden');
             loadSelectedModules();
