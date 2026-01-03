@@ -204,53 +204,109 @@
       max-width: 320px;
       display: flex;
       flex-direction: column;
-      gap: 15px;
+      gap: 0;
     }
     
-    .module-choice-panel {
+    .module-choice-box {
       background: #2a2a2a;
       border-radius: 15px;
-      padding: 18px;
+      padding: 20px;
       width: 100%;
       box-shadow: 0 4px 20px rgba(0,0,0,0.5);
       border: 2px solid #3a3a3a;
-      transition: opacity 0.3s, transform 0.3s;
     }
     
-    .module-choice-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
+    .module-choice-warning {
+      text-align: center;
       margin-bottom: 15px;
-      padding: 0;
+      padding: 12px;
+      background: rgba(255, 152, 0, 0.1);
+      border-radius: 8px;
+      border: 1px solid rgba(255, 152, 0, 0.3);
     }
     
-    .module-choice-icon {
-      font-size: 20px;
-      line-height: 1;
+    .module-choice-warning-icon {
+      font-size: 24px;
+      margin-bottom: 8px;
     }
     
-    .module-choice-title {
+    .module-choice-warning-text {
+      font-size: 11px;
+      line-height: 1.4;
+      opacity: 0.8;
+    }
+    
+    .module-choice-instruction {
+      text-align: center;
+      margin-bottom: 20px;
       font-size: 14px;
       font-weight: bold;
-      opacity: 0.9;
-      line-height: 1;
     }
     
-    .module-choice-buttons {
-      display: flex;
+    .module-choice-instruction-icon {
+      font-size: 18px;
+      margin-right: 5px;
+    }
+    
+    .module-category {
+      margin-bottom: 20px;
+      transition: opacity 0.3s, max-height 0.3s, margin 0.3s;
+      overflow: hidden;
+    }
+    
+    .module-category.hidden {
+      opacity: 0;
+      max-height: 0;
+      margin: 0;
+    }
+    
+    .module-category-header {
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0.7;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    
+    .module-category-buttons {
+      display: grid;
       gap: 10px;
-      flex-direction: column;
+    }
+    
+    /* 2 buttons: side by side */
+    .module-category-buttons.count-2 {
+      grid-template-columns: 1fr 1fr;
+    }
+    
+    /* 3 buttons: 2 top, 1 bottom center */
+    .module-category-buttons.count-3 {
+      grid-template-columns: 1fr 1fr;
+    }
+    
+    .module-category-buttons.count-3 .btn-module-choice:last-child {
+      grid-column: 1 / -1;
+      max-width: 50%;
+      margin: 0 auto;
+    }
+    
+    /* 4 buttons: 2x2 grid */
+    .module-category-buttons.count-4 {
+      grid-template-columns: 1fr 1fr;
+    }
+    
+    /* 5+ buttons: continue grid */
+    .module-category-buttons.count-5,
+    .module-category-buttons.count-6 {
+      grid-template-columns: 1fr 1fr;
     }
     
     .btn-module-choice {
-      width: 100%;
-      padding: 15px;
+      padding: 12px 10px;
       background: #3a3a3a;
       color: white;
       border: 2px solid #555;
       border-radius: 8px;
-      font-size: 15px;
+      font-size: 13px;
       font-weight: bold;
       cursor: pointer;
       transition: all 0.3s;
@@ -279,6 +335,12 @@
     .btn-module-choice.playlist:hover {
       background: #9C27B0;
       border-color: #9C27B0;
+    }
+    
+    .module-category-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #555, transparent);
+      margin: 15px 0;
     }
     
     /* ========== MAIN CONTAINER ========== */
@@ -418,9 +480,7 @@
   <div class="module-choices-container hidden" id="moduleChoicesContainer"></div>
 
   <!-- ========== MAIN CONTAINER ========== -->
-  <div class="container hidden" id="mainContainer">
-    <div class="loading">Loading modules...</div>
-  </div>
+  <div class="container hidden" id="mainContainer"></div>
 
   <script>
     const API_URL = window.location.origin;
@@ -569,13 +629,13 @@
       const ids = modules.map(m => m.id);
       
       if (ids.includes('spotify') || ids.includes('playlist')) {
-        return { name: 'Music', icon: '🎵' };
+        return 'Music';
       }
       if (ids.includes('timer') || ids.includes('countdown')) {
-        return { name: 'Timer', icon: '⏱️' };
+        return 'Timer';
       }
       
-      return { name: modules[0].name || 'Module', icon: '⚙️' };
+      return modules[0].name || 'Module';
     }
     
     function renderModuleChoices() {
@@ -588,23 +648,44 @@
       
       moduleChoicesContainer.classList.remove('hidden');
       
-      pendingConflicts.forEach((conflict) => {
-        const panel = document.createElement('div');
-        panel.className = 'module-choice-panel';
-        panel.id = `choice-panel-${conflict.priority}`;
+      // Create main box
+      const box = document.createElement('div');
+      box.className = 'module-choice-box';
+      box.id = 'module-choice-box';
+      
+      // Warning message
+      const warning = document.createElement('div');
+      warning.className = 'module-choice-warning';
+      warning.innerHTML = `
+        <div class="module-choice-warning-icon">⚠️</div>
+        <div class="module-choice-warning-text">
+          You have multiple modules with the same purpose installed.<br>
+          You can only use one module.
+        </div>
+      `;
+      box.appendChild(warning);
+      
+      // Instruction
+      const instruction = document.createElement('div');
+      instruction.className = 'module-choice-instruction';
+      instruction.innerHTML = `<span class="module-choice-instruction-icon">🎯</span>Choose Module`;
+      box.appendChild(instruction);
+      
+      // Render each category
+      pendingConflicts.forEach((conflict, index) => {
+        const category = document.createElement('div');
+        category.className = 'module-category';
+        category.id = `category-${conflict.priority}`;
         
-        const category = getCategoryName(conflict.modules);
-        
+        // Category header (small)
         const header = document.createElement('div');
-        header.className = 'module-choice-header';
-        header.innerHTML = `
-          <span class="module-choice-icon">${category.icon}</span>
-          <span class="module-choice-title">${category.name}</span>
-        `;
-        panel.appendChild(header);
+        header.className = 'module-category-header';
+        header.textContent = getCategoryName(conflict.modules);
+        category.appendChild(header);
         
+        // Buttons container with dynamic grid
         const buttonsContainer = document.createElement('div');
-        buttonsContainer.className = 'module-choice-buttons';
+        buttonsContainer.className = `module-category-buttons count-${conflict.modules.length}`;
         
         conflict.modules.forEach(mod => {
           const btn = document.createElement('button');
@@ -616,9 +697,19 @@
           buttonsContainer.appendChild(btn);
         });
         
-        panel.appendChild(buttonsContainer);
-        moduleChoicesContainer.appendChild(panel);
+        category.appendChild(buttonsContainer);
+        
+        // Add divider if not last category
+        if (index < pendingConflicts.length - 1) {
+          const divider = document.createElement('div');
+          divider.className = 'module-category-divider';
+          category.appendChild(divider);
+        }
+        
+        box.appendChild(category);
       });
+      
+      moduleChoicesContainer.appendChild(box);
     }
     
     function selectModule(priority, module) {
@@ -626,18 +717,28 @@
       
       moduleChoices[priority] = module.id;
       
+      // Remove from pending
       pendingConflicts = pendingConflicts.filter(c => c.priority !== priority);
       
-      const panel = document.getElementById(`choice-panel-${priority}`);
-      if (panel) {
-        panel.style.opacity = '0';
-        panel.style.transform = 'scale(0.95)';
+      // Hide the category with animation
+      const category = document.getElementById(`category-${priority}`);
+      if (category) {
+        category.classList.add('hidden');
+        
         setTimeout(() => {
-          panel.remove();
+          category.remove();
           
+          // If no more conflicts, hide entire box and load modules
           if (pendingConflicts.length === 0) {
-            moduleChoicesContainer.classList.add('hidden');
-            loadSelectedModules();
+            const box = document.getElementById('module-choice-box');
+            if (box) {
+              box.style.opacity = '0';
+              box.style.transform = 'scale(0.95)';
+              setTimeout(() => {
+                moduleChoicesContainer.classList.add('hidden');
+                loadSelectedModules();
+              }, 300);
+            }
           }
         }, 300);
       }
@@ -738,9 +839,9 @@
         
         // Clear and load
         mainContainer.innerHTML = '';
+        mainContainer.classList.remove('hidden');
         
         if (modulesToLoad.length === 0) {
-          mainContainer.innerHTML = '<div class="loading">No modules found</div>';
           return;
         }
         
