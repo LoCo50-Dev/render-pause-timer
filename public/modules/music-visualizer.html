@@ -1,22 +1,23 @@
-<!DOCTYPE html>
-<html lang="de">
+Perfekt! Jetzt erstelle ich die **music-visualizer.html** mit der exakt gleichen Rainbow-Animation wie im Control Interface:
+Action: file_editor create /app/frontend/public/modules/music-visualizer.html --file-text "<!DOCTYPE html>
+<html lang=\"de\">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset=\"UTF-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
   <title>Music Visualizer</title>
   
   <!-- ==========================================
        MODULE CONFIGURATION
        ========================================== -->
-  <script type="application/json" id="module-config">
+  <script type=\"application/json\" id=\"module-config\">
   {
-    "id": "music-visualizer",
-    "name": "Music Visualizer",
-    "priority": 0,
-    "hasControllerUI": false,
-    "hasOverlay": true,
-    "overlayUrl": "/modules/music-visualizer.html",
-    "dependencies": []
+    \"id\": \"music-visualizer\",
+    \"name\": \"Music Visualizer\",
+    \"priority\": 0,
+    \"hasControllerUI\": false,
+    \"hasOverlay\": true,
+    \"overlayUrl\": \"/modules/music-visualizer.html\",
+    \"dependencies\": []
   }
   </script>
   
@@ -51,21 +52,21 @@
       max-width: 1200px;
       box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
       
-      /* Rainbow border - ANIMATED FLOWING */
+      /* Rainbow border - ANIMATED FLOWING (gleich wie Control Interface) */
       padding: 5px;
       border-radius: 25px;
       background: linear-gradient(
         90deg,
         #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3,
-        #ff0000
+        #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000
       );
-      background-size: 200% 100%;
-      animation: rainbow-flow 8s linear infinite;
+      background-size: 300% 100%;
+      animation: rainbow-flow 15s linear infinite;
     }
     
     @keyframes rainbow-flow {
       0% { background-position: 0% 0%; }
-      100% { background-position: 200% 0%; }
+      100% { background-position: 300% 0%; }
     }
     
     .now-playing-inner {
@@ -80,12 +81,12 @@
     
     /* Slide in from left */
     .now-playing.slide-in {
-      animation: slideInFromLeft 1s ease-out forwards;
+      animation: slideInFromLeft 1s ease-out forwards, rainbow-flow 15s linear infinite;
     }
     
     /* Slide out to LEFT (back where it came from) */
     .now-playing.slide-out {
-      animation: slideOutToLeft 1s ease-in forwards;
+      animation: slideOutToLeft 1s ease-in forwards, rainbow-flow 15s linear infinite;
     }
     
     @keyframes slideInFromLeft {
@@ -170,19 +171,19 @@
 </head>
 <body>
   <!-- Audio players for Playlist module -->
-  <audio id="audio-player" preload="auto" playsinline></audio>
-  <audio id="audio-player-next" preload="auto" playsinline></audio>
+  <audio id=\"audio-player\" preload=\"auto\" playsinline></audio>
+  <audio id=\"audio-player-next\" preload=\"auto\" playsinline></audio>
 
   <!-- Now Playing Display -->
-  <div class="now-playing" id="nowPlaying">
-    <div class="now-playing-inner">
-      <div class="album-cover" id="albumCover">
+  <div class=\"now-playing\" id=\"nowPlaying\">
+    <div class=\"now-playing-inner\">
+      <div class=\"album-cover\" id=\"albumCover\">
         🎵
       </div>
-      <div class="track-info">
-        <div class="track-name" id="trackName">No music playing</div>
-        <div class="artist-name" id="artistName">Start music to see info</div>
-        <div class="music-logo" id="musicSource">🎵 Music</div>
+      <div class=\"track-info\">
+        <div class=\"track-name\" id=\"trackName\">No music playing</div>
+        <div class=\"artist-name\" id=\"artistName\">Start music to see info</div>
+        <div class=\"music-logo\" id=\"musicSource\">🎵 Music</div>
       </div>
     </div>
   </div>
@@ -434,7 +435,7 @@
             artistName.textContent = data.metadata.artist;
             
             if (data.metadata.coverUrl) {
-              albumCover.innerHTML = `<img src="${data.metadata.coverUrl}" alt="Cover">`;
+              albumCover.innerHTML = `<img src=\"${data.metadata.coverUrl}\" alt=\"Cover\">`;
             } else {
               albumCover.innerHTML = '🎵';
             }
@@ -560,3 +561,5 @@
   </script>
 </body>
 </html>
+"
+Observation: Create successful: /app/frontend/public/modules/music-visualizer.html
