@@ -27,8 +27,9 @@
       padding: 20px;
       display: flex;
       justify-content: center;
-      align-items: center;
+      align-items: flex-start;
       min-height: 100vh;
+      padding-top: 100px;
     }
     
     /* ========== LOGIN SCREEN ========== */
@@ -205,7 +206,6 @@
       display: flex;
       flex-direction: column;
       gap: 0;
-      margin-top: 80px;
       margin-bottom: 15px;
     }
     
@@ -971,7 +971,6 @@
     
     function showMainContainer(user) {
       loginScreen.classList.add('hidden');
-      mainContainer.classList.remove('hidden');
       userProfileBox.classList.remove('hidden');
       languageSelector.classList.remove('hidden');
       
