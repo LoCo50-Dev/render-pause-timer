@@ -365,9 +365,16 @@ async function loadRotatorState() {
     const res = await fetch(`${apiUrl}/api/text-rotator/state`, { headers: getHeaders() });
     const data = await res.json();
     
+    const oldActive = rotatorActive;
+    const oldInterval = intervalSeconds;
+    
     rotatorActive = data.isActive || false;
-    texts = data.texts || ["DAUERWERBESENDUNG"];
     intervalSeconds = data.intervalSeconds || 10;
+    
+    // Only update texts if not currently editing
+    if (!document.activeElement || !document.activeElement.classList.contains('rotator-text-input')) {
+      texts = data.texts || ["DAUERWERBESENDUNG"];
+    }
     
     if (rotatorActive) {
       toggle.classList.add('active');
@@ -377,7 +384,10 @@ async function loadRotatorState() {
       panel.style.borderColor = moduleConfig.borderColor;
     }
     
-    renderTexts();
+    // Only re-render if texts actually changed and not editing
+    if (!document.activeElement || !document.activeElement.classList.contains('rotator-text-input')) {
+      renderTexts();
+    }
     updateSliderDisplay();
   } catch (err) {
     console.error('[TEXT-ROTATOR] Load state error:', err);
@@ -438,7 +448,7 @@ toggle.addEventListener('click', async () => {
 
 // Initialize
 loadRotatorState();
-rotatorInterval = setInterval(loadRotatorState, 3000);
+rotatorInterval = setInterval(loadRotatorState, 30000); // Changed to 30 seconds
 
 // Return module instance
 return {
@@ -495,12 +505,7 @@ return {
       text-align: center;
       text-transform: uppercase;
       letter-spacing: 4px;
-      padding: 30px 60px;
-      background: linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,165,0,0.2));
-      border: 4px solid #FFD700;
-      border-radius: 20px;
-      box-shadow: 0 0 40px rgba(255,215,0,0.5);
-      max-width: 90%;
+      white-space: nowrap;
       opacity: 0;
       transition: opacity 1s ease-in-out;
     }
