@@ -297,13 +297,39 @@ async function checkModules() {
       m.id === 'entertaining-countdown'
     );
     
-    renderControlSection();
+    await renderControlSection();
+    await syncCurrentMode();
   } catch (err) {
     console.error('[TIMER] Error checking modules:', err);
   }
 }
 
-function renderControlSection() {
+async function syncCurrentMode() {
+  try {
+    // Check which mode is currently active
+    if (musicModuleAvailable) {
+      const timerRes = await fetch(`${apiUrl}/api/timer`, { headers: getHeaders() });
+      const timerData = await timerRes.json();
+      if (timerData.musicConnected) {
+        currentMode = 'music';
+      }
+    }
+    
+    if (entertainmentModuleAvailable) {
+      const entertainRes = await fetch(`${apiUrl}/api/entertaining/state`, { headers: getHeaders() });
+      const entertainData = await entertainRes.json();
+      if (entertainData.enabled) {
+        currentMode = 'entertainment';
+      }
+    }
+    
+    await renderControlSection();
+  } catch (err) {
+    console.error('[TIMER] Error syncing mode:', err);
+  }
+}
+
+async function renderControlSection() {
   const section = document.getElementById('timer-control-section');
   
   // Both modules available: Toggle switch
@@ -326,13 +352,23 @@ function renderControlSection() {
   // Only music available
   else if (musicModuleAvailable && !entertainmentModuleAvailable) {
     section.innerHTML = `
-      <div class="timer-music-connect">
+      <div class="timer-music-connect" style="width: 100%; margin-left: 0;">
         <input type="checkbox" id="timer-music-checkbox">
         <label for="timer-music-checkbox">🎵 Music</label>
       </div>
     `;
     
     const checkbox = document.getElementById('timer-music-checkbox');
+    
+    // Sync checkbox state
+    try {
+      const res = await fetch(`${apiUrl}/api/timer`, { headers: getHeaders() });
+      const data = await res.json();
+      checkbox.checked = data.musicConnected || false;
+    } catch (err) {
+      console.error('[TIMER] Error syncing music checkbox:', err);
+    }
+    
     checkbox.addEventListener('change', async (e) => {
       try {
         await fetch(`${apiUrl}/api/timer/music-connect`, {
@@ -348,13 +384,23 @@ function renderControlSection() {
   // Only entertainment available
   else if (!musicModuleAvailable && entertainmentModuleAvailable) {
     section.innerHTML = `
-      <div class="timer-music-connect">
+      <div class="timer-music-connect" style="width: 100%; margin-left: 0;">
         <input type="checkbox" id="timer-entertainment-checkbox">
         <label for="timer-entertainment-checkbox">🎬 Entertainment</label>
       </div>
     `;
     
     const checkbox = document.getElementById('timer-entertainment-checkbox');
+    
+    // Sync checkbox state
+    try {
+      const res = await fetch(`${apiUrl}/api/entertaining/state`, { headers: getHeaders() });
+      const data = await res.json();
+      checkbox.checked = data.enabled || false;
+    } catch (err) {
+      console.error('[TIMER] Error syncing entertainment checkbox:', err);
+    }
+    
     checkbox.addEventListener('change', async (e) => {
       try {
         await fetch(`${apiUrl}/api/entertaining/state`, {
@@ -542,8 +588,6 @@ container.innerHTML = `
       padding: 8px 10px;
       background: #1a1a1a;
       border-radius: 8px;
-      width: 50%;
-      margin-left: auto;
     }
     
     .timer-music-connect input[type="checkbox"] {
@@ -908,94 +952,97 @@ return {
     
     let currentLang = 'en';
     let messageShownAt = null;
-   let skippedShownAt = null;
-
-async function updateCountdown() {
-  try {
-    const res = await fetch(`${API_URL}/api/timer/public`);
-    const timer = await res.json();
+    let skippedShownAt = null;
     
-    currentLang = timer.language || 'en';
-    
-    if (timer.isRunning && timer.remaining > 0) {
-      const mins = Math.floor(timer.remaining / 60);
-      const secs = timer.remaining % 60;
-      timeEl.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-      timeEl.classList.remove('hidden');
-      
-      const percent = (timer.remaining / timer.duration) * 100;
-      barEl.style.width = `${percent}%`;
-      
-      if (timer.endTime) {
-        const endDate = new Date(timer.endTime);
-        const hours = endDate.getHours().toString().padStart(2, '0');
-        const minutes = endDate.getMinutes().toString().padStart(2, '0');
-        endEl.textContent = `${texts[currentLang].around} ${hours}:${minutes} ${texts[currentLang].clock}`;
-        endEl.classList.remove('hidden');
-      } else {
-        endEl.classList.add('hidden');
-      }
-      
-      messageEl.classList.add('hidden');
-      skippedEl.classList.add('hidden');
-      messageShownAt = null;
-      skippedShownAt = null;
-    } else {
-      timeEl.classList.add('hidden');
-      barEl.style.width = '0%';
-      
-      if (timer.wasSkipped) {
-        messageEl.textContent = texts[currentLang].starting;
-        messageEl.classList.remove('hidden');
+    async function updateCountdown() {
+      try {
+        const res = await fetch(`${API_URL}/api/timer/public`);
+        const timer = await res.json();
         
-        if (messageShownAt === null) {
-          messageShownAt = Date.now();
-        }
+        currentLang = timer.language || 'en';
         
-        const messageElapsed = Date.now() - messageShownAt;
-        if (messageElapsed > 5000) {
-          messageEl.classList.add('stop-pulse');
+        if (timer.isRunning && timer.remaining > 0) {
+          const mins = Math.floor(timer.remaining / 60);
+          const secs = timer.remaining % 60;
+          timeEl.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+          timeEl.classList.remove('hidden');
+          
+          const percent = (timer.remaining / timer.duration) * 100;
+          barEl.style.width = `${percent}%`;
+          
+          if (timer.endTime) {
+            const endDate = new Date(timer.endTime);
+            const hours = endDate.getHours().toString().padStart(2, '0');
+            const minutes = endDate.getMinutes().toString().padStart(2, '0');
+            endEl.textContent = `${texts[currentLang].around} ${hours}:${minutes} ${texts[currentLang].clock}`;
+            endEl.classList.remove('hidden');
+          } else {
+            endEl.classList.add('hidden');
+          }
+          
+          messageEl.classList.add('hidden');
+          skippedEl.classList.add('hidden');
+          messageShownAt = null;
+          skippedShownAt = null;
         } else {
-          messageEl.classList.remove('stop-pulse');
+          timeEl.classList.add('hidden');
+          barEl.style.width = '0%';
+          
+          if (timer.wasSkipped) {
+            messageEl.textContent = texts[currentLang].starting;
+            messageEl.classList.remove('hidden');
+            
+            if (messageShownAt === null) {
+              messageShownAt = Date.now();
+            }
+            
+            const messageElapsed = Date.now() - messageShownAt;
+            if (messageElapsed > 5000) {
+              messageEl.classList.add('stop-pulse');
+            } else {
+              messageEl.classList.remove('stop-pulse');
+            }
+            
+            skippedEl.textContent = texts[currentLang].skipped;
+            skippedEl.classList.remove('hidden');
+            endEl.classList.add('hidden');
+            
+            if (skippedShownAt === null) {
+              skippedShownAt = Date.now();
+            }
+            
+            const skippedElapsed = Date.now() - skippedShownAt;
+            if (skippedElapsed > 5000) {
+              skippedEl.classList.add('stop-pulse');
+            } else {
+              skippedEl.classList.remove('stop-pulse');
+            }
+          } else {
+            messageEl.textContent = texts[currentLang].starting;
+            messageEl.classList.remove('hidden');
+            
+            if (messageShownAt === null) {
+              messageShownAt = Date.now();
+            }
+            
+            const messageElapsed = Date.now() - messageShownAt;
+            if (messageElapsed > 5000) {
+              messageEl.classList.add('stop-pulse');
+            } else {
+              messageEl.classList.remove('stop-pulse');
+            }
+            
+            skippedEl.classList.add('hidden');
+            endEl.classList.add('hidden');
+          }
         }
-        
-        skippedEl.textContent = texts[currentLang].skipped;
-        skippedEl.classList.remove('hidden');
-        endEl.classList.add('hidden');
-        
-        if (skippedShownAt === null) {
-          skippedShownAt = Date.now();
-        }
-        
-        const skippedElapsed = Date.now() - skippedShownAt;
-        if (skippedElapsed > 5000) {
-          skippedEl.classList.add('stop-pulse');
-        } else {
-          skippedEl.classList.remove('stop-pulse');
-        }
-      } else {
-        messageEl.textContent = texts[currentLang].starting;
-        messageEl.classList.remove('hidden');
-        
-        if (messageShownAt === null) {
-          messageShownAt = Date.now();
-        }
-        
-        const messageElapsed = Date.now() - messageShownAt;
-        if (messageElapsed > 5000) {
-          messageEl.classList.add('stop-pulse');
-        } else {
-          messageEl.classList.remove('stop-pulse');
-        }
-        
-        skippedEl.classList.add('hidden');
-        endEl.classList.add('hidden');
+      } catch (err) {
+        console.error('[COUNTDOWN] Update error:', err);
       }
     }
-  } catch (err) {
-    console.error('[COUNTDOWN] Update error:', err);
-  }
-}
-
-setInterval(updateCountdown, 100);
-updateCountdown();
+    
+    setInterval(updateCountdown, 100);
+    updateCountdown();
+  </script>
+</body>
+</html>
