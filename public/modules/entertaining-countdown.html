@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entertaining Countdown</title>
+  
+  <!-- ==========================================
+       MODULE CONFIGURATION
+       ========================================== -->
+  <script type="application/json" id="module-config">
+  {
+    "id": "entertaining-countdown",
+    "name": "Entertaining Countdown",
+    "type": "Addon",
+    "priority": 0,
+    "hasControllerUI": false,
+    "hasOverlay": true,
+    "overlayUrl": "/modules/entertaining-countdown.html",
+    "dependencies": ["timer"]
+  }
+  </script>
+  
+  <!-- ==========================================
+       SERVER MODULE CODE
+       ========================================== -->
+  <script type="text/x-server-module">
+const fs = require('fs');
+const path = require('path');
+
+// Initialize entertainment state
+if (!moduleStates.entertainingCountdown) {
+  moduleStates.entertainingCountdown = {
+    enabled: false,
+    videos: [],
+    usedVideos: []
+  };
+}
+
+const entertainState = moduleStates.entertainingCountdown;
+
+// Scan videos recursively
+function scanVideos(dir, baseDir = dir) {
+  let videos = [];
+  
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      return videos;
+    }
+    
+    const items = fs.readdirSync(dir);
+    
+    for (const item of items) {
+      const fullPath = path.join(dir, item);
+      const stat = fs.statSync(fullPath);
+      
+      if (stat.isDirectory()) {
+        videos = videos.concat(scanVideos(fullPath, baseDir));
+      } else if (stat.isFile()) {
+        const ext = path.extname(item).toLowerCase();
+        const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.m4v'];
+        
+        if (videoExtensions.includes(ext)) {
+          const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
+          videos.push({
+            filename: item,
+            path: relativePath,
+            fullPath: fullPath
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[ENTERTAINING] Error scanning videos:', err);
+  }
+  
+  return videos;
+}
+
+// Scan on startup
+const vidsDir = path.join(__dirname, 'public', 'vids');
+entertainState.videos = scanVideos(vidsDir);
+console.log(`[ENTERTAINING] Scanned ${entertainState.videos.length} videos from /vids`);
+
+// Routes
+app.get('/api/entertaining/videos', (req, res) => {
+  res.json({ videos: entertainState.videos });
+});
+
+app.get('/api/entertaining/state', getUserFromSession, (req, res) => {
+  res.json({
+    enabled: entertainState.enabled,
+    usedVideos: entertainState.usedVideos
+  });
+});
+
+app.post('/api/entertaining/state', getUserFromSession, (req, res) => {
+  const { enabled } = req.body;
+  
+  if (typeof enabled !== 'undefined') {
+    entertainState.enabled = enabled;
+    console.log(`[ENTERTAINING] ${enabled ? 'Enabled' : 'Disabled'}`);
+  }
+  
+  res.json({ enabled: entertainState.enabled });
+});
+
+app.post('/api/entertaining/reset-used', getUserFromSession, (req, res) => {
+  entertainState.usedVideos = [];
+  console.log('[ENTERTAINING] Reset used videos');
+  res.json({ success: true });
+});
+
+app.post('/api/entertaining/mark-used', (req, res) => {
+  const { videoPath } = req.body;
+  
+  if (videoPath && !entertainState.usedVideos.includes(videoPath)) {
+    entertainState.usedVideos.push(videoPath);
+    console.log(`[ENTERTAINING] Marked as used: ${videoPath}`);
+  }
+  
+  res.json({ success: true });
+});
+
+app.get('/api/entertaining/public', (req, res) => {
+  res.json({
+    enabled: entertainState.enabled,
+    videos: entertainState.videos,
+    usedVideos: entertainState.usedVideos
+  });
+});
+  </script>
+  
+  <!-- ==========================================
+       OBS OVERLAY STYLES
+       ========================================== -->
+  <style>
+    @font-face {
+      font-family: 'StreamFont';
+      src: url('/fonts/font.ttf') format('truetype');
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      background: transparent;
+      font-family: 'StreamFont', Arial, sans-serif;
+      color: white;
+      overflow: hidden;
+    }
+    
+    .entertainment-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    /* Video Player */
+    .video-player {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: black;
+      opacity: 0;
+      transition: opacity 2s ease-in-out;
+    }
+    
+    .video-player.visible {
+      opacity: 1;
+    }
+    
+    .video-player.fade-out {
+      opacity: 0;
+      transition: opacity 5s ease-in-out;
+    }
+    
+    .video-player video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    
+    /* Timer Display */
+    .timer-display {
+      position: absolute;
+      text-align: center;
+      transition: all 2s ease-in-out;
+      z-index: 10;
+    }
+    
+    .timer-display.large {
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    
+    .timer-display.small {
+      bottom: 20px;
+      left: 20px;
+      transform: none;
+    }
+    
+    .timer-time {
+      font-weight: bold;
+      text-shadow: 
+        -2px -2px 0 #000,
+        2px -2px 0 #000,
+        -2px 2px 0 #000,
+        2px 2px 0 #000,
+        0 0 20px rgba(0, 0, 0, 0.8);
+      transition: font-size 2s ease-in-out;
+    }
+    
+    .timer-display.large .timer-time {
+      font-size: 120px;
+    }
+    
+    .timer-display.small .timer-time {
+      font-size: 35px;
+    }
+    
+    .timer-bar {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 0 auto;
+      transition: width 2s ease-in-out, height 2s ease-in-out;
+    }
+    
+    .timer-display.large .timer-bar {
+      width: 600px;
+      height: 20px;
+      margin-top: 20px;
+    }
+    
+    .timer-display.small .timer-bar {
+      width: 180px;
+      height: 8px;
+      margin-top: 8px;
+    }
+    
+    .timer-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #00BCD4, #00E5FF);
+      transition: width 0.5s linear;
+      border-radius: 10px;
+    }
+    
+    .timer-end {
+      opacity: 0.8;
+      margin-top: 10px;
+      transition: font-size 2s ease-in-out;
+    }
+    
+    .timer-display.large .timer-end {
+      font-size: 24px;
+    }
+    
+    .timer-display.small .timer-end {
+      font-size: 12px;
+    }
+    
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="entertainment-container">
+    <!-- Video Player -->
+    <div class="video-player" id="videoPlayer">
+      <video id="videoElement" muted></video>
+    </div>
+    
+    <!-- Timer Display -->
+    <div class="timer-display large" id="timerDisplay">
+      <div class="timer-time" id="timerTime">00:00</div>
+      <div class="timer-bar">
+        <div class="timer-bar-fill" id="timerBar"></div>
+      </div>
+      <div class="timer-end" id="timerEnd">Around --:--</div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = window.location.origin;
+    
+    const videoPlayer = document.getElementById('videoPlayer');
+    const videoElement = document.getElementById('videoElement');
+    const timerDisplay = document.getElementById('timerDisplay');
+    const timerTime = document.getElementById('timerTime');
+    const timerBar = document.getElementById('timerBar');
+    const timerEnd = document.getElementById('timerEnd');
+    
+    let allVideos = [];
+    let availableVideos = [];
+    let usedVideos = [];
+    let currentPlaylist = [];
+    let currentVideoIndex = 0;
+    let isEnabled = false;
+    let timerState = null;
+    let phase = 'idle'; // idle, intro, video, transition, outro
+    let phaseStartTime = null;
+    let videoDurations = new Map();
+    
+    // Knapsack algorithm to find best video combination
+    function findBestVideoCombination(targetTime, videos) {
+      if (videos.length === 0 || targetTime <= 0) return [];
+      
+      // Filter videos that have duration
+      const validVideos = videos.filter(v => videoDurations.has(v.path) && videoDurations.get(v.path) > 0);
+      
+      if (validVideos.length === 0) return [];
+      
+      // Simple greedy approach: sort by duration descending, pick largest that fit
+      const sorted = [...validVideos].sort((a, b) => 
+        videoDurations.get(b.path) - videoDurations.get(a.path)
+      );
+      
+      const selected = [];
+      let remaining = targetTime;
+      
+      for (const video of sorted) {
+        const duration = videoDurations.get(video.path);
+        if (duration <= remaining) {
+          selected.push(video);
+          remaining -= duration;
+          
+          if (remaining <= 0) break;
+        }
+      }
+      
+      return selected;
+    }
+    
+    // Load video metadata
+    async function loadVideoMetadata(videoPath) {
+      return new Promise((resolve) => {
+        const tempVideo = document.createElement('video');
+        tempVideo.src = `/vids/${videoPath}`;
+        
+        tempVideo.addEventListener('loadedmetadata', () => {
+          const duration = Math.floor(tempVideo.duration);
+          videoDurations.set(videoPath, duration);
+          console.log(`[ENTERTAIN] Loaded: ${videoPath} (${duration}s)`);
+          resolve(duration);
+        });
+        
+        tempVideo.addEventListener('error', () => {
+          console.error(`[ENTERTAIN] Error loading: ${videoPath}`);
+          resolve(0);
+        });
+      });
+    }
+    
+    // Scan all videos
+    async function scanAllVideos() {
+      try {
+        const res = await fetch(`${API_URL}/api/entertaining/videos`);
+        const data = await res.json();
+        allVideos = data.videos || [];
+        
+        console.log(`[ENTERTAIN] Scanning ${allVideos.length} videos...`);
+        
+        // Load metadata for all videos
+        for (const video of allVideos) {
+          await loadVideoMetadata(video.path);
+        }
+        
+        console.log(`[ENTERTAIN] Scan complete! ${videoDurations.size} videos ready`);
+      } catch (err) {
+        console.error('[ENTERTAIN] Scan error:', err);
+      }
+    }
+    
+    // Update timer display
+    function updateTimerDisplay(remaining, duration, endTime) {
+      const mins = Math.floor(remaining / 60);
+      const secs = remaining % 60;
+      timerTime.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      
+      const percent = (remaining / duration) * 100;
+      timerBar.style.width = `${percent}%`;
+      
+      if (endTime) {
+        const date = new Date(endTime);
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        timerEnd.textContent = `Around ${hours}:${minutes}`;
+      }
+    }
+    
+    // Switch timer to small
+    function makeTimerSmall() {
+      timerDisplay.classList.remove('large');
+      timerDisplay.classList.add('small');
+    }
+    
+    // Switch timer to large
+    function makeTimerLarge() {
+      timerDisplay.classList.remove('small');
+      timerDisplay.classList.add('large');
+    }
+    
+    // Play video
+    function playVideo(videoPath) {
+      return new Promise((resolve) => {
+        videoElement.src = `/vids/${videoPath}`;
+        videoPlayer.classList.add('visible');
+        videoElement.play();
+        
+        videoElement.onended = () => {
+          resolve();
+        };
+      });
+    }
+    
+    // Fade out video
+    function fadeOutVideo() {
+      videoPlayer.classList.add('fade-out');
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          videoPlayer.classList.remove('visible', 'fade-out');
+          videoElement.pause();
+          videoElement.src = '';
+          resolve();
+        }, 5000);
+      });
+    }
+    
+    // Main entertainment loop
+    async function entertainmentLoop() {
+      try {
+        const stateRes = await fetch(`${API_URL}/api/entertaining/public`);
+        const state = await stateRes.json();
+        
+        const timerRes = await fetch(`${API_URL}/api/timer/public`);
+        const timer = await timerRes.json();
+        
+        isEnabled = state.enabled;
+        usedVideos = state.usedVideos || [];
+        timerState = timer;
+        
+        // Update timer display
+        if (timer.isRunning && timer.remaining > 0) {
+          updateTimerDisplay(timer.remaining, timer.duration, timer.endTime);
+        }
+        
+        // If not enabled or timer not running, reset
+        if (!isEnabled || !timer.isRunning || timer.remaining <= 0) {
+          if (phase !== 'idle') {
+            console.log('[ENTERTAIN] Stopping...');
+            await fadeOutVideo();
+            makeTimerLarge();
+            phase = 'idle';
+            currentPlaylist = [];
+            currentVideoIndex = 0;
+          }
+          return;
+        }
+        
+        // Timer just started
+        if (phase === 'idle' && timer.remaining > 0) {
+          console.log('[ENTERTAIN] Starting...');
+          phase = 'intro';
+          phaseStartTime = Date.now();
+          makeTimerLarge();
+          
+          // Calculate available time
+          const availableTime = timer.duration - 20; // -10s start, -10s end
+          
+          // Filter available videos (not used)
+          availableVideos = allVideos.filter(v => 
+            !usedVideos.includes(v.path) && videoDurations.has(v.path)
+          );
+          
+          // Account for transitions (10s per video)
+          const numVideos = Math.floor(availableTime / 30); // rough estimate
+          const timeForVideos = availableTime - (numVideos * 10);
+          
+          // Find best combination
+          currentPlaylist = findBestVideoCombination(timeForVideos, availableVideos);
+          currentVideoIndex = 0;
+          
+          console.log(`[ENTERTAIN] Playlist: ${currentPlaylist.length} videos`);
+          currentPlaylist.forEach((v, i) => {
+            console.log(`  ${i + 1}. ${v.filename} (${videoDurations.get(v.path)}s)`);
+          });
+        }
+        
+        // Intro phase (first 10 seconds)
+        if (phase === 'intro') {
+          const elapsed = Math.floor((Date.now() - phaseStartTime) / 1000);
+          
+          if (elapsed >= 10) {
+            console.log('[ENTERTAIN] Intro complete, starting videos');
+            phase = 'video';
+            makeTimerSmall();
+            
+            if (currentPlaylist.length > 0) {
+              const video = currentPlaylist[currentVideoIndex];
+              await fetch(`${API_URL}/api/entertaining/mark-used`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ videoPath: video.path })
+              });
+              
+              await playVideo(video.path);
+              currentVideoIndex++;
+              phase = 'transition';
+              phaseStartTime = Date.now();
+            }
+          }
+        }
+        
+        // Transition phase (between videos)
+        if (phase === 'transition') {
+          const elapsed = Math.floor((Date.now() - phaseStartTime) / 1000);
+          
+          if (elapsed < 5) {
+            // Fading in timer (first 5s)
+            makeTimerLarge();
+          } else if (elapsed >= 10) {
+            // Check if more videos available and time left
+            const timeLeft = timer.remaining - 10; // reserve 10s for outro
+            
+            if (currentVideoIndex < currentPlaylist.length) {
+              const nextVideo = currentPlaylist[currentVideoIndex];
+              const videoDuration = videoDurations.get(nextVideo.path);
+              
+              if (videoDuration && videoDuration <= timeLeft - 10) {
+                console.log(`[ENTERTAIN] Playing next: ${nextVideo.filename}`);
+                phase = 'video';
+                makeTimerSmall();
+                
+                await fetch(`${API_URL}/api/entertaining/mark-used`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ videoPath: nextVideo.path })
+                });
+                
+                await playVideo(nextVideo.path);
+                currentVideoIndex++;
+                phase = 'transition';
+                phaseStartTime = Date.now();
+              } else {
+                console.log('[ENTERTAIN] No time for next video, entering outro');
+                phase = 'outro';
+                makeTimerLarge();
+              }
+            } else {
+              console.log('[ENTERTAIN] Playlist complete, entering outro');
+              phase = 'outro';
+              makeTimerLarge();
+            }
+          }
+        }
+        
+        // Outro phase (last 10 seconds)
+        if (phase === 'outro' || timer.remaining <= 10) {
+          if (phase !== 'outro') {
+            console.log('[ENTERTAIN] Entering outro');
+            phase = 'outro';
+            await fadeOutVideo();
+            makeTimerLarge();
+          }
+        }
+        
+      } catch (err) {
+        console.error('[ENTERTAIN] Loop error:', err);
+      }
+    }
+    
+    // Reset handler
+    async function handleReset() {
+      console.log('[ENTERTAIN] Timer reset detected');
+      if (phase !== 'idle') {
+        await fadeOutVideo();
+        makeTimerLarge();
+        phase = 'idle';
+        currentPlaylist = [];
+        currentVideoIndex = 0;
+        
+        // Reset used videos
+        await fetch(`${API_URL}/api/entertaining/reset-used`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+    
+    // Monitor for timer reset
+    let lastRemaining = 0;
+    setInterval(() => {
+      if (timerState && timerState.remaining > lastRemaining && phase !== 'idle') {
+        handleReset();
+      }
+      lastRemaining = timerState ? timerState.remaining : 0;
+    }, 500);
+    
+    // Initialize
+    scanAllVideos();
+    setInterval(entertainmentLoop, 100);
+  </script>
+</body>
+</html>
