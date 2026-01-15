@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entertaining Countdown Addon</title>
+  
+  <!-- ==========================================
+       MODULE CONFIGURATION
+       ========================================== -->
+  <script type="application/json" id="module-config">
+  {
+    "id": "entertaining-countdown",
+    "name": "Entertaining Countdown",
+    "type": "Addon",
+    "priority": 0,
+    "hasControllerUI": false,
+    "hasOverlay": false,
+    "dependencies": ["timer"]
+  }
+  </script>
+  
+  <!-- ==========================================
+       SERVER MODULE CODE
+       ========================================== -->
+  <script type="text/x-server-module">
+// Initialize entertainment state
+if (!moduleStates.entertainingCountdown) {
+  moduleStates.entertainingCountdown = {
+    enabled: false,
+    videos: [],
+    usedVideos: []
+  };
+}
+
+const entertainState = moduleStates.entertainingCountdown;
+
+// Scan videos recursively
+function scanVideos(dir, baseDir = dir) {
+  let videos = [];
+  
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      return videos;
+    }
+    
+    const items = fs.readdirSync(dir);
+    
+    for (const item of items) {
+      const fullPath = path.join(dir, item);
+      const stat = fs.statSync(fullPath);
+      
+      if (stat.isDirectory()) {
+        videos = videos.concat(scanVideos(fullPath, baseDir));
+      } else if (stat.isFile()) {
+        const ext = path.extname(item).toLowerCase();
+        const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.m4v'];
+        
+        if (videoExtensions.includes(ext)) {
+          const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
+          videos.push({
+            filename: item,
+            path: relativePath,
+            fullPath: fullPath
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[ENTERTAINING] Error scanning videos:', err);
+  }
+  
+  return videos;
+}
+
+// Scan on startup
+const vidsDir = path.join(__dirname, 'public', 'vids');
+entertainState.videos = scanVideos(vidsDir);
+console.log(`[ENTERTAINING] Scanned ${entertainState.videos.length} videos from /vids`);
+
+// Routes
+app.get('/api/entertaining/videos', (req, res) => {
+  res.json({ videos: entertainState.videos });
+});
+
+app.get('/api/entertaining/state', getUserFromSession, (req, res) => {
+  res.json({
+    enabled: entertainState.enabled,
+    usedVideos: entertainState.usedVideos
+  });
+});
+
+app.post('/api/entertaining/state', getUserFromSession, (req, res) => {
+  const { enabled } = req.body;
+  
+  if (typeof enabled !== 'undefined') {
+    entertainState.enabled = enabled;
+    console.log(`[ENTERTAINING] ${enabled ? 'Enabled' : 'Disabled'}`);
+  }
+  
+  res.json({ enabled: entertainState.enabled });
+});
+
+app.post('/api/entertaining/reset-used', getUserFromSession, (req, res) => {
+  entertainState.usedVideos = [];
+  console.log('[ENTERTAINING] Reset used videos');
+  res.json({ success: true });
+});
+
+app.post('/api/entertaining/mark-used', (req, res) => {
+  const { videoPath } = req.body;
+  
+  if (videoPath && !entertainState.usedVideos.includes(videoPath)) {
+    entertainState.usedVideos.push(videoPath);
+    console.log(`[ENTERTAINING] Marked as used: ${videoPath}`);
+  }
+  
+  res.json({ success: true });
+});
+
+app.get('/api/entertaining/public', (req, res) => {
+  res.json({
+    enabled: entertainState.enabled,
+    videos: entertainState.videos,
+    usedVideos: entertainState.usedVideos
+  });
+});
+  </script>
+</head>
+<body style="background: #1a1a1a; color: white; font-family: Arial; padding: 50px; text-align: center;">
+  <h1>🎬 Entertaining Countdown Addon</h1>
+  <p>This addon is active and provides video playback integrated into the timer countdown.</p>
+  <p style="opacity: 0.7; margin-top: 20px;">No separate overlay needed - entertainment is integrated into countdown.html</p>
+  <p style="opacity: 0.5; margin-top: 40px; font-size: 12px;">Module Type: Addon | Priority: 0</p>
+</body>
+</html>
