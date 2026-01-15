@@ -281,9 +281,8 @@ let timerInterval = null;
 let isUpdating = false;
 let musicModuleAvailable = false;
 let entertainmentModuleAvailable = false;
-let currentMode = 'music'; // 'music' or 'entertainment'
+let currentMode = 'music';
 
-// Check if modules exist
 async function checkModules() {
   try {
     const res = await fetch(`${apiUrl}/api/modules/list`);
@@ -306,7 +305,6 @@ async function checkModules() {
 
 async function syncCurrentMode() {
   try {
-    // Check which mode is currently active
     if (musicModuleAvailable) {
       const timerRes = await fetch(`${apiUrl}/api/timer`, { headers: getHeaders() });
       const timerData = await timerRes.json();
@@ -332,7 +330,6 @@ async function syncCurrentMode() {
 async function renderControlSection() {
   const section = document.getElementById('timer-control-section');
   
-  // Both modules available: Toggle switch
   if (musicModuleAvailable && entertainmentModuleAvailable) {
     section.innerHTML = `
       <div class="timer-mode-toggle">
@@ -344,12 +341,10 @@ async function renderControlSection() {
       </div>
     `;
     
-    // Add click handlers
     document.getElementById('mode-toggle').addEventListener('click', toggleMode);
     document.getElementById('label-music').addEventListener('click', () => setMode('music'));
     document.getElementById('label-entertainment').addEventListener('click', () => setMode('entertainment'));
   }
-  // Only music available
   else if (musicModuleAvailable && !entertainmentModuleAvailable) {
     section.innerHTML = `
       <div class="timer-music-connect" style="width: 100%; margin-left: 0;">
@@ -360,7 +355,6 @@ async function renderControlSection() {
     
     const checkbox = document.getElementById('timer-music-checkbox');
     
-    // Sync checkbox state
     try {
       const res = await fetch(`${apiUrl}/api/timer`, { headers: getHeaders() });
       const data = await res.json();
@@ -381,7 +375,6 @@ async function renderControlSection() {
       }
     });
   }
-  // Only entertainment available
   else if (!musicModuleAvailable && entertainmentModuleAvailable) {
     section.innerHTML = `
       <div class="timer-music-connect" style="width: 100%; margin-left: 0;">
@@ -392,7 +385,6 @@ async function renderControlSection() {
     
     const checkbox = document.getElementById('timer-entertainment-checkbox');
     
-    // Sync checkbox state
     try {
       const res = await fetch(`${apiUrl}/api/entertaining/state`, { headers: getHeaders() });
       const data = await res.json();
@@ -413,7 +405,6 @@ async function renderControlSection() {
       }
     });
   }
-  // Neither available
   else {
     section.innerHTML = '';
   }
@@ -441,7 +432,6 @@ async function updateMode() {
     labelMusic.classList.remove('active');
     labelEntertainment.classList.add('active');
     
-    // Enable entertainment, disable music
     try {
       await fetch(`${apiUrl}/api/entertaining/state`, {
         method: 'POST',
@@ -462,7 +452,6 @@ async function updateMode() {
     labelMusic.classList.add('active');
     labelEntertainment.classList.remove('active');
     
-    // Enable music, disable entertainment
     try {
       await fetch(`${apiUrl}/api/timer/music-connect`, {
         method: 'POST',
@@ -481,7 +470,6 @@ async function updateMode() {
   }
 }
 
-// Render UI
 container.innerHTML = `
   <style>
     .timer-preview {
@@ -672,7 +660,6 @@ container.innerHTML = `
   </div>
 `;
 
-// Get elements
 const previewTime = document.getElementById('timer-preview-time');
 const previewEnd = document.getElementById('timer-preview-end');
 const timeInput = document.getElementById('timer-time-input');
@@ -680,7 +667,6 @@ const startBtn = document.getElementById('timer-start-btn');
 const pauseBtn = document.getElementById('timer-pause-btn');
 const resetBtn = document.getElementById('timer-reset-btn');
 
-// Update UI function
 async function updateTimerUI() {
   if (isUpdating) return;
   
@@ -720,7 +706,6 @@ async function updateTimerUI() {
       pauseBtn.classList.add('hidden');
       resetBtn.classList.add('hidden');
       
-      // Auto-restore on natural expiration
       if (timer.musicConnected && !timer.isRunning && timer.remaining === 0) {
         try {
           await fetch(`${apiUrl}/api/timer/reset`, {
@@ -738,7 +723,6 @@ async function updateTimerUI() {
   }
 }
 
-// Event listeners
 startBtn.addEventListener('click', async () => {
   isUpdating = true;
   const minutes = parseInt(timeInput.value) || 5;
@@ -797,12 +781,10 @@ resetBtn.addEventListener('click', async () => {
   }
 });
 
-// Initialize
 timerInterval = setInterval(updateTimerUI, 1000);
 updateTimerUI();
 checkModules();
 
-// Return module instance
 return {
   destroy: function() {
     if (timerInterval) {
@@ -831,32 +813,111 @@ return {
       background: transparent;
       font-family: 'StreamFont', Arial, sans-serif;
       color: white;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
       overflow: hidden;
     }
     
+    /* Video Player (Entertainment Mode) */
+    .video-player {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: black;
+      opacity: 0;
+      transition: opacity 2s ease-in-out;
+      z-index: 1;
+      display: none;
+    }
+    
+    .video-player.active {
+      display: block;
+    }
+    
+    .video-player.visible {
+      opacity: 1;
+    }
+    
+    .video-player.fade-out {
+      opacity: 0;
+      transition: opacity 5s ease-in-out;
+    }
+    
+    .video-player video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    
+    /* Countdown Container */
     .countdown-container {
+      position: fixed;
+      display: flex;
+      justify-content: center;
+      align-items: center;
       text-align: center;
       padding: 40px;
+      transition: all 2s ease-in-out;
+      z-index: 10;
+    }
+    
+    .countdown-container.large {
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: auto;
+      height: auto;
+    }
+    
+    .countdown-container.small {
+      bottom: 20px;
+      left: 20px;
+      transform: none;
+      top: auto;
+      width: auto;
+      height: auto;
     }
     
     .countdown-time {
-      font-size: 120px;
       font-weight: bold;
-      text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+      text-shadow: 
+        -2px -2px 0 #000,
+        2px -2px 0 #000,
+        -2px 2px 0 #000,
+        2px 2px 0 #000,
+        0 0 20px rgba(0, 0, 0, 0.8);
+      margin-bottom: 20px;
+      transition: font-size 2s ease-in-out, margin-bottom 2s ease-in-out;
+    }
+    
+    .countdown-container.large .countdown-time {
+      font-size: 120px;
       margin-bottom: 20px;
     }
     
+    .countdown-container.small .countdown-time {
+      font-size: 35px;
+      margin-bottom: 8px;
+    }
+    
     .countdown-bar {
-      width: 600px;
-      height: 20px;
       background: rgba(255, 255, 255, 0.2);
       border-radius: 10px;
       overflow: hidden;
       margin: 0 auto 20px;
+      transition: width 2s ease-in-out, height 2s ease-in-out, margin 2s ease-in-out;
+    }
+    
+    .countdown-container.large .countdown-bar {
+      width: 600px;
+      height: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .countdown-container.small .countdown-bar {
+      width: 180px;
+      height: 8px;
+      margin-bottom: 8px;
     }
     
     .countdown-bar-fill {
@@ -867,8 +928,16 @@ return {
     }
     
     .countdown-end {
-      font-size: 24px;
       opacity: 0.8;
+      transition: font-size 2s ease-in-out;
+    }
+    
+    .countdown-container.large .countdown-end {
+      font-size: 24px;
+    }
+    
+    .countdown-container.small .countdown-end {
+      font-size: 12px;
     }
     
     .countdown-message {
@@ -916,25 +985,38 @@ return {
   </style>
 </head>
 <body>
-  <div class="countdown-container">
-    <div class="countdown-time" id="countdownTime">00:00</div>
-    <div class="countdown-message hidden" id="countdownMessage">Stream continues shortly</div>
-    <div class="countdown-bar">
-      <div class="countdown-bar-fill" id="countdownBar"></div>
+  <!-- Video Player for Entertainment -->
+  <div class="video-player" id="videoPlayer">
+    <video id="videoElement" muted></video>
+  </div>
+  
+  <!-- Countdown Display -->
+  <div class="countdown-container large" id="countdownContainer">
+    <div style="text-align: center;">
+      <div class="countdown-time" id="countdownTime">00:00</div>
+      <div class="countdown-message hidden" id="countdownMessage">Stream continues shortly</div>
+      <div class="countdown-bar">
+        <div class="countdown-bar-fill" id="countdownBar"></div>
+      </div>
+      <div class="countdown-end" id="countdownEnd">Around --:--</div>
+      <div class="countdown-skipped hidden" id="countdownSkipped">Break was skipped</div>
     </div>
-    <div class="countdown-end" id="countdownEnd">Around --:--</div>
-    <div class="countdown-skipped hidden" id="countdownSkipped">Break was skipped</div>
   </div>
 
   <script>
     const API_URL = window.location.origin;
     
+    // DOM Elements
+    const videoPlayer = document.getElementById('videoPlayer');
+    const videoElement = document.getElementById('videoElement');
+    const countdownContainer = document.getElementById('countdownContainer');
     const timeEl = document.getElementById('countdownTime');
     const barEl = document.getElementById('countdownBar');
     const endEl = document.getElementById('countdownEnd');
     const messageEl = document.getElementById('countdownMessage');
     const skippedEl = document.getElementById('countdownSkipped');
     
+    // State
     const texts = {
       de: {
         around: 'Ungefähr um',
@@ -954,6 +1036,308 @@ return {
     let messageShownAt = null;
     let skippedShownAt = null;
     
+    // Entertainment State
+    let entertainmentEnabled = false;
+    let allVideos = [];
+    let availableVideos = [];
+    let usedVideos = [];
+    let currentPlaylist = [];
+    let currentVideoIndex = 0;
+    let timerState = null;
+    let phase = 'idle'; // idle, intro, video, transition, outro
+    let phaseStartTime = null;
+    let videoDurations = new Map();
+    let lastTimerState = null;
+    
+    // Check if Entertainment module exists
+    async function checkEntertainmentModule() {
+      try {
+        const res = await fetch(`${API_URL}/api/entertaining/state`);
+        return res.ok;
+      } catch (err) {
+        return false;
+      }
+    }
+    
+    // Load video metadata
+    async function loadVideoMetadata(videoPath) {
+      return new Promise((resolve) => {
+        const tempVideo = document.createElement('video');
+        tempVideo.src = `/vids/${videoPath}`;
+        
+        tempVideo.addEventListener('loadedmetadata', () => {
+          const duration = Math.floor(tempVideo.duration);
+          videoDurations.set(videoPath, duration);
+          console.log(`[ENTERTAIN] Loaded: ${videoPath} (${duration}s)`);
+          resolve(duration);
+        });
+        
+        tempVideo.addEventListener('error', () => {
+          console.error(`[ENTERTAIN] Error loading: ${videoPath}`);
+          resolve(0);
+        });
+      });
+    }
+    
+    // Scan all videos
+    async function scanAllVideos() {
+      try {
+        const res = await fetch(`${API_URL}/api/entertaining/videos`);
+        const data = await res.json();
+        allVideos = data.videos || [];
+        
+        console.log(`[ENTERTAIN] Scanning ${allVideos.length} videos...`);
+        
+        for (const video of allVideos) {
+          await loadVideoMetadata(video.path);
+        }
+        
+        console.log(`[ENTERTAIN] Scan complete! ${videoDurations.size} videos ready`);
+      } catch (err) {
+        console.error('[ENTERTAIN] Scan error:', err);
+      }
+    }
+    
+    // Knapsack algorithm
+    function findBestVideoCombination(targetTime, videos) {
+      if (videos.length === 0 || targetTime <= 0) return [];
+      
+      const validVideos = videos.filter(v => videoDurations.has(v.path) && videoDurations.get(v.path) > 0);
+      
+      if (validVideos.length === 0) return [];
+      
+      const sorted = [...validVideos].sort((a, b) => 
+        videoDurations.get(b.path) - videoDurations.get(a.path)
+      );
+      
+      const selected = [];
+      let remaining = targetTime;
+      
+      for (const video of sorted) {
+        const duration = videoDurations.get(video.path);
+        if (duration <= remaining) {
+          selected.push(video);
+          remaining -= duration;
+          
+          if (remaining <= 0) break;
+        }
+      }
+      
+      return selected;
+    }
+    
+    // Timer Display Functions
+    function makeTimerSmall() {
+      countdownContainer.classList.remove('large');
+      countdownContainer.classList.add('small');
+    }
+    
+    function makeTimerLarge() {
+      countdownContainer.classList.remove('small');
+      countdownContainer.classList.add('large');
+    }
+    
+    // Video Functions
+    function playVideo(videoPath) {
+      return new Promise((resolve) => {
+        videoElement.src = `/vids/${videoPath}`;
+        videoPlayer.classList.add('active', 'visible');
+        videoElement.play();
+        
+        videoElement.onended = () => {
+          resolve();
+        };
+      });
+    }
+    
+    async function fadeOutVideo() {
+      videoPlayer.classList.add('fade-out');
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          videoPlayer.classList.remove('visible', 'fade-out', 'active');
+          videoElement.pause();
+          videoElement.src = '';
+          resolve();
+        }, 5000);
+      });
+    }
+    
+    // Update Timer Display
+    function updateTimerDisplay(remaining, duration, endTime) {
+      const mins = Math.floor(remaining / 60);
+      const secs = remaining % 60;
+      timeEl.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      
+      const percent = (remaining / duration) * 100;
+      barEl.style.width = `${percent}%`;
+      
+      if (endTime) {
+        const date = new Date(endTime);
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        endEl.textContent = `${texts[currentLang].around} ${hours}:${minutes} ${texts[currentLang].clock}`;
+      }
+    }
+    
+    // Entertainment Loop
+    async function entertainmentLoop() {
+      if (!entertainmentEnabled) return;
+      
+      try {
+        const stateRes = await fetch(`${API_URL}/api/entertaining/public`);
+        const state = await stateRes.json();
+        
+        const timerRes = await fetch(`${API_URL}/api/timer/public`);
+        const timer = await timerRes.json();
+        
+        entertainmentEnabled = state.enabled;
+        usedVideos = state.usedVideos || [];
+        timerState = timer;
+        
+        if (timer.isRunning && timer.remaining > 0) {
+          updateTimerDisplay(timer.remaining, timer.duration, timer.endTime);
+        }
+        
+        if (!state.enabled || !timer.isRunning || timer.remaining <= 0) {
+          if (phase !== 'idle') {
+            console.log('[ENTERTAIN] Stopping...');
+            await fadeOutVideo();
+            makeTimerLarge();
+            phase = 'idle';
+            currentPlaylist = [];
+            currentVideoIndex = 0;
+          }
+          return;
+        }
+        
+        // Timer just started
+        if (phase === 'idle' && timer.remaining > 0) {
+          console.log('[ENTERTAIN] Starting...');
+          phase = 'intro';
+          phaseStartTime = Date.now();
+          makeTimerLarge();
+          
+          const availableTime = timer.duration - 20;
+          
+          availableVideos = allVideos.filter(v => 
+            !usedVideos.includes(v.path) && videoDurations.has(v.path)
+          );
+          
+          const numVideos = Math.floor(availableTime / 30);
+          const timeForVideos = availableTime - (numVideos * 10);
+          
+          currentPlaylist = findBestVideoCombination(timeForVideos, availableVideos);
+          currentVideoIndex = 0;
+          
+          console.log(`[ENTERTAIN] Playlist: ${currentPlaylist.length} videos`);
+          currentPlaylist.forEach((v, i) => {
+            console.log(`  ${i + 1}. ${v.filename} (${videoDurations.get(v.path)}s)`);
+          });
+        }
+        
+        // Intro phase
+        if (phase === 'intro') {
+          const elapsed = Math.floor((Date.now() - phaseStartTime) / 1000);
+          
+          if (elapsed >= 10) {
+            console.log('[ENTERTAIN] Intro complete, starting videos');
+            phase = 'video';
+            makeTimerSmall();
+            
+            if (currentPlaylist.length > 0) {
+              const video = currentPlaylist[currentVideoIndex];
+              await fetch(`${API_URL}/api/entertaining/mark-used`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ videoPath: video.path })
+              });
+              
+              await playVideo(video.path);
+              currentVideoIndex++;
+              phase = 'transition';
+              phaseStartTime = Date.now();
+            }
+          }
+        }
+        
+        // Transition phase
+        if (phase === 'transition') {
+          const elapsed = Math.floor((Date.now() - phaseStartTime) / 1000);
+          
+          if (elapsed < 5) {
+            makeTimerLarge();
+          } else if (elapsed >= 10) {
+            const timeLeft = timer.remaining - 10;
+            
+            if (currentVideoIndex < currentPlaylist.length) {
+              const nextVideo = currentPlaylist[currentVideoIndex];
+              const videoDuration = videoDurations.get(nextVideo.path);
+              
+              if (videoDuration && videoDuration <= timeLeft - 10) {
+                console.log(`[ENTERTAIN] Playing next: ${nextVideo.filename}`);
+                phase = 'video';
+                makeTimerSmall();
+                
+                await fetch(`${API_URL}/api/entertaining/mark-used`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ videoPath: nextVideo.path })
+                });
+                
+                await playVideo(nextVideo.path);
+                currentVideoIndex++;
+                phase = 'transition';
+                phaseStartTime = Date.now();
+              } else {
+                console.log('[ENTERTAIN] No time for next video, entering outro');
+                phase = 'outro';
+                makeTimerLarge();
+              }
+            } else {
+              console.log('[ENTERTAIN] Playlist complete, entering outro');
+              phase = 'outro';
+              makeTimerLarge();
+            }
+          }
+        }
+        
+        // Outro phase
+        if (phase === 'outro' || timer.remaining <= 10) {
+          if (phase !== 'outro') {
+            console.log('[ENTERTAIN] Entering outro');
+            phase = 'outro';
+            await fadeOutVideo();
+            makeTimerLarge();
+          }
+        }
+        
+      } catch (err) {
+        console.error('[ENTERTAIN] Loop error:', err);
+      }
+    }
+    
+    // Handle Reset
+    async function handleReset() {
+      console.log('[ENTERTAIN] Timer reset detected');
+      if (phase !== 'idle') {
+        await fadeOutVideo();
+        makeTimerLarge();
+        phase = 'idle';
+        currentPlaylist = [];
+        currentVideoIndex = 0;
+        
+        try {
+          await fetch(`${API_URL}/api/entertaining/reset-used`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (err) {
+          console.error('[ENTERTAIN] Reset error:', err);
+        }
+      }
+    }
+    
+    // Normal Countdown Update
     async function updateCountdown() {
       try {
         const res = await fetch(`${API_URL}/api/timer/public`);
@@ -961,6 +1345,13 @@ return {
         
         currentLang = timer.language || 'en';
         
+        // Check if entertainment is enabled
+        if (entertainmentEnabled) {
+          // Entertainment handles display
+          return;
+        }
+        
+        // Normal countdown mode
         if (timer.isRunning && timer.remaining > 0) {
           const mins = Math.floor(timer.remaining / 60);
           const secs = timer.remaining % 60;
@@ -1036,13 +1427,45 @@ return {
             endEl.classList.add('hidden');
           }
         }
+        
+        // Detect reset
+        if (lastTimerState && lastTimerState.remaining < timer.remaining && entertainmentEnabled) {
+          handleReset();
+        }
+        lastTimerState = timer;
+        
       } catch (err) {
         console.error('[COUNTDOWN] Update error:', err);
       }
     }
     
-    setInterval(updateCountdown, 100);
-    updateCountdown();
+    // Initialize
+    async function initialize() {
+      const hasEntertainment = await checkEntertainmentModule();
+      
+      if (hasEntertainment) {
+        console.log('[ENTERTAIN] Module detected, initializing...');
+        await scanAllVideos();
+        
+        // Check if entertainment is enabled
+        try {
+          const res = await fetch(`${API_URL}/api/entertaining/state`);
+          const data = await res.json();
+          entertainmentEnabled = data.enabled || false;
+        } catch (err) {
+          console.error('[ENTERTAIN] Error checking state:', err);
+        }
+        
+        setInterval(entertainmentLoop, 100);
+      } else {
+        console.log('[COUNTDOWN] Running in normal mode (no entertainment)');
+      }
+      
+      setInterval(updateCountdown, 100);
+      updateCountdown();
+    }
+    
+    initialize();
   </script>
 </body>
 </html>
