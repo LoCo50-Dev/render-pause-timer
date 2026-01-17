@@ -816,7 +816,6 @@ return {
       overflow: hidden;
     }
     
-    /* Countdown Container */
     .countdown-container {
       position: fixed;
       display: flex;
@@ -945,9 +944,30 @@ return {
     .hidden {
       display: none !important;
     }
+    
+    /* Entertainment Video Player */
+    #entertainment-video {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: black;
+      z-index: 5;
+      opacity: 0;
+      transition: opacity 2s ease-in-out;
+    }
+    
+    #entertainment-video.visible {
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
+  <!-- Entertainment Video Player -->
+  <video id="entertainment-video" class="hidden"></video>
+  
   <!-- Countdown Display -->
   <div class="countdown-container large" id="countdownContainer">
     <div style="text-align: center;">
@@ -971,6 +991,7 @@ return {
     const endEl = document.getElementById('countdownEnd');
     const messageEl = document.getElementById('countdownMessage');
     const skippedEl = document.getElementById('countdownSkipped');
+    const videoEl = document.getElementById('entertainment-video');
     
     // State
     const texts = {
@@ -992,11 +1013,19 @@ return {
     let messageShownAt = null;
     let skippedShownAt = null;
     let entertainmentEnabled = false;
-    let entertainmentScriptLoaded = false;
     let lastTimerRemaining = 0;
     let currentTimerState = null;
     
-    // Timer Control API for Entertainment
+    // Entertainment Variables
+    let videoDurations = new Map();
+    let availableVideos = [];
+    let currentPlaylist = [];
+    let currentVideoIndex = 0;
+    let entertainmentActive = false;
+    let timerStartTime = 0;
+    let videoTransitioning = false;
+    
+    // Timer Control API
     window.entertainmentTimerControl = {
       makeTimerLarge: function() {
         countdownContainer.classList.remove('small');
@@ -1018,24 +1047,245 @@ return {
       }
     }
     
-    // Load entertainment script dynamically
-    async function loadEntertainmentScript() {
-      if (entertainmentScriptLoaded) return;
-      
+    // Scan all videos and get durations
+    async function scanAllVideos() {
+      try {
+        console.log('[ENTERTAIN] Scanning videos...');
+        const res = await fetch(`${window.API_URL}/api/entertaining/videos`);
+        const data = await res.json();
+        availableVideos = data.videos || [];
+        
+        videoDurations.clear();
+        
+        for (const video of availableVideos) {
+          try {
+            const duration = await getVideoDuration(video.path);
+            videoDurations.set(video.path, duration);
+            console.log(`[ENTERTAIN] Loaded: ${video.name} (${Math.round(duration)}s)`);
+          } catch (err) {
+            console.error(`[ENTERTAIN] Error loading ${video.name}:`, err);
+          }
+        }
+        
+        console.log(`[ENTERTAIN] Scan complete! ${videoDurations.size} videos ready`);
+      } catch (err) {
+        console.error('[ENTERTAIN] Scan error:', err);
+      }
+    }
+    
+    // Get video duration
+    function getVideoDuration(videoPath) {
       return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = '/modules/video-countdown.js';
-        script.onload = () => {
-          console.log('[COUNTDOWN] Entertainment script loaded');
-          entertainmentScriptLoaded = true;
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        
+        video.addEventListener('loadedmetadata', () => {
+          resolve(video.duration);
+          video.remove();
+        });
+        
+        video.addEventListener('error', () => {
+          reject(new Error('Failed to load video metadata'));
+          video.remove();
+        });
+        
+        video.src = videoPath;
+      });
+    }
+    
+    // Find best video combination using knapsack algorithm
+    function findBestVideoCombination(targetTime, videos) {
+      if (videos.length === 0) return [];
+      
+      const n = videos.length;
+      const dp = Array(Math.ceil(targetTime) + 1).fill(0);
+      const selected = Array(Math.ceil(targetTime) + 1).fill().map(() => []);
+      
+      for (let i = 0; i < n; i++) {
+        const duration = Math.floor(videos[i].duration);
+        
+        for (let t = Math.ceil(targetTime); t >= duration; t--) {
+          const newValue = dp[t - duration] + duration;
+          if (newValue > dp[t]) {
+            dp[t] = newValue;
+            selected[t] = [...selected[t - duration], videos[i]];
+          }
+        }
+      }
+      
+      return selected[Math.ceil(targetTime)] || [];
+    }
+    
+    // Create playlist for timer duration
+    function createPlaylist(timerDuration) {
+      const START_BUFFER = 10;
+      const END_BUFFER = 10;
+      const TRANSITION_TIME = 10;
+      
+      let availableTime = timerDuration - START_BUFFER - END_BUFFER;
+      
+      const videoList = Array.from(videoDurations.entries()).map(([path, duration]) => ({
+        path,
+        duration,
+        name: availableVideos.find(v => v.path === path)?.name || path
+      }));
+      
+      const playlist = [];
+      const usedVideos = new Set();
+      
+      while (availableTime > 0 && usedVideos.size < videoList.length) {
+        const unusedVideos = videoList.filter(v => !usedVideos.has(v.path));
+        if (unusedVideos.length === 0) break;
+        
+        const combination = findBestVideoCombination(availableTime, unusedVideos);
+        
+        if (combination.length === 0) {
+          const shortest = unusedVideos.reduce((min, v) => 
+            v.duration < min.duration ? v : min
+          );
+          
+          if (shortest.duration <= availableTime) {
+            playlist.push(shortest);
+            usedVideos.add(shortest.path);
+            availableTime -= (shortest.duration + TRANSITION_TIME);
+          } else {
+            break;
+          }
+        } else {
+          for (const video of combination) {
+            playlist.push(video);
+            usedVideos.add(video.path);
+            availableTime -= TRANSITION_TIME;
+          }
+          availableTime -= combination.reduce((sum, v) => sum + v.duration, 0);
+        }
+      }
+      
+      console.log(`[ENTERTAIN] Playlist: ${playlist.length} videos for ${timerDuration}s timer`);
+      return playlist;
+    }
+    
+    // Play video with fade
+    async function playVideo(videoPath) {
+      return new Promise((resolve) => {
+        videoEl.src = videoPath;
+        videoEl.classList.remove('hidden');
+        
+        setTimeout(() => {
+          videoEl.classList.add('visible');
+        }, 50);
+        
+        videoEl.play().catch(err => {
+          console.error('[ENTERTAIN] Play error:', err);
+        });
+        
+        videoEl.onended = () => {
           resolve();
         };
-        script.onerror = () => {
-          console.error('[COUNTDOWN] Failed to load entertainment script');
-          reject();
-        };
-        document.head.appendChild(script);
       });
+    }
+    
+    // Stop video with fade
+    async function stopVideo() {
+      return new Promise((resolve) => {
+        videoEl.classList.remove('visible');
+        
+        setTimeout(() => {
+          videoEl.pause();
+          videoEl.src = '';
+          videoEl.classList.add('hidden');
+          resolve();
+        }, 2000);
+      });
+    }
+    
+    // Entertainment Loop
+    async function entertainmentLoop(timer) {
+      if (!entertainmentEnabled || !timer.isRunning) {
+        if (entertainmentActive) {
+          await reset();
+        }
+        return;
+      }
+      
+      // Timer just started
+      if (!entertainmentActive && timer.remaining === timer.duration) {
+        console.log('[ENTERTAIN] Starting...');
+        entertainmentActive = true;
+        timerStartTime = Date.now();
+        currentPlaylist = createPlaylist(timer.duration);
+        currentVideoIndex = 0;
+        
+        // Show timer large for 10 seconds
+        window.entertainmentTimerControl.makeTimerLarge();
+        
+        setTimeout(async () => {
+          window.entertainmentTimerControl.makeTimerSmall();
+          
+          if (currentPlaylist.length > 0) {
+            await playNextVideo();
+          }
+        }, 10000);
+        
+        return;
+      }
+      
+      // Check if video ended and play next
+      if (entertainmentActive && !videoTransitioning && videoEl.paused && currentVideoIndex < currentPlaylist.length) {
+        const elapsed = Math.floor((Date.now() - timerStartTime) / 1000);
+        const remaining = timer.duration - elapsed;
+        
+        if (remaining > 15) {
+          await playNextVideo();
+        }
+      }
+      
+      // Last 10 seconds - show timer large
+      if (entertainmentActive && timer.remaining <= 10 && timer.remaining > 0) {
+        if (!videoEl.classList.contains('hidden')) {
+          await stopVideo();
+        }
+        window.entertainmentTimerControl.makeTimerLarge();
+      }
+    }
+    
+    // Play next video in playlist
+    async function playNextVideo() {
+      if (currentVideoIndex >= currentPlaylist.length) return;
+      
+      videoTransitioning = true;
+      
+      const video = currentPlaylist[currentVideoIndex];
+      console.log(`[ENTERTAIN] Playing: ${video.name}`);
+      
+      // Stop current video if playing
+      if (!videoEl.classList.contains('hidden')) {
+        await stopVideo();
+        window.entertainmentTimerControl.makeTimerLarge();
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+      
+      // Play next video
+      window.entertainmentTimerControl.makeTimerSmall();
+      await playVideo(video.path);
+      
+      currentVideoIndex++;
+      videoTransitioning = false;
+    }
+    
+    // Reset entertainment state
+    async function reset() {
+      console.log('[ENTERTAIN] Reset');
+      entertainmentActive = false;
+      currentPlaylist = [];
+      currentVideoIndex = 0;
+      videoTransitioning = false;
+      
+      if (!videoEl.classList.contains('hidden')) {
+        await stopVideo();
+      }
+      
+      window.entertainmentTimerControl.makeTimerLarge();
     }
     
     // Update Timer Display
@@ -1064,16 +1314,12 @@ return {
         currentLang = timer.language || 'en';
         currentTimerState = timer;
         
-        // Check entertainment state
+        // Run entertainment loop if enabled
         if (entertainmentEnabled) {
-          // Entertainment handles timer display
-          if (window.entertainmentLogic) {
-            await window.entertainmentLogic.entertainmentLoop(timer, entertainmentEnabled);
-          }
-          return;
+          await entertainmentLoop(timer);
         }
         
-        // Normal countdown mode
+        // Normal countdown mode (or small timer during entertainment)
         if (timer.isRunning && timer.remaining > 0) {
           updateTimerDisplay(timer);
           
@@ -1137,9 +1383,9 @@ return {
         }
         
         // Detect reset (timer restarted)
-        if (lastTimerRemaining > timer.remaining + 5 && entertainmentEnabled && window.entertainmentLogic) {
-          console.log('[COUNTDOWN] Reset detected');
-          await window.entertainmentLogic.reset();
+        if (lastTimerRemaining > timer.remaining + 5 && entertainmentEnabled) {
+          console.log('[ENTERTAIN] Reset detected');
+          await reset();
         }
         lastTimerRemaining = timer.remaining;
         
@@ -1159,21 +1405,17 @@ return {
           
           // Entertainment just activated
           if (entertainmentEnabled && !wasEnabled) {
-            console.log('[COUNTDOWN] Entertainment activated, loading script...');
-            await loadEntertainmentScript();
+            console.log('[ENTERTAIN] Entertainment activated');
+            await scanAllVideos();
           }
           
           // Entertainment just deactivated
           if (!entertainmentEnabled && wasEnabled) {
-            console.log('[COUNTDOWN] Entertainment deactivated');
-            if (window.entertainmentLogic) {
-              await window.entertainmentLogic.reset();
-            }
-            window.entertainmentTimerControl.makeTimerLarge();
+            console.log('[ENTERTAIN] Entertainment deactivated');
+            await reset();
           }
         }
       } catch (err) {
-        // Entertainment module not available
         entertainmentEnabled = false;
       }
     }
@@ -1184,6 +1426,7 @@ return {
       
       if (hasEntertainment) {
         console.log('[COUNTDOWN] Entertainment module detected');
+        await scanAllVideos();
         setInterval(checkEntertainmentStatus, 1000);
       } else {
         console.log('[COUNTDOWN] Running in normal mode (no entertainment)');
