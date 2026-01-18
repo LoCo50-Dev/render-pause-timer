@@ -28,110 +28,87 @@
 if (!moduleStates.entertainingCountdown) {
   moduleStates.entertainingCountdown = {
     enabled: false,
-    videos: [],
-    usedVideos: []
+    videos: []
   };
 }
 
 const entertainState = moduleStates.entertainingCountdown;
 
-// Scan videos recursively
-function scanVideos(dir, baseDir = dir) {
-  let videos = [];
+// Scan videos from /public/vids/ recursively
+function scanVideos() {
+  const vidsPath = path.join(__dirname, 'public', 'vids');
+  const videos = [];
   
-  try {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-      return videos;
-    }
-    
-    const items = fs.readdirSync(dir);
-    
-    for (const item of items) {
-      const fullPath = path.join(dir, item);
-      const stat = fs.statSync(fullPath);
-      
-      if (stat.isDirectory()) {
-        videos = videos.concat(scanVideos(fullPath, baseDir));
-      } else if (stat.isFile()) {
-        const ext = path.extname(item).toLowerCase();
-        const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.m4v'];
-        
-        if (videoExtensions.includes(ext)) {
-          const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
-          videos.push({
-            filename: item,
-            path: relativePath,
-            fullPath: fullPath
-          });
-        }
+  function scanDir(dir) {
+    try {
+      if (!fs.existsSync(dir)) {
+        console.log('[ENTERTAINING] vids folder not found, creating...');
+        fs.mkdirSync(dir, { recursive: true });
+        return;
       }
+      
+      const files = fs.readdirSync(dir);
+      
+      files.forEach(file => {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+        
+        if (stat.isDirectory()) {
+          scanDir(fullPath);
+        } else {
+          const ext = path.extname(file).toLowerCase();
+          const videoExts = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv'];
+          
+          if (videoExts.includes(ext)) {
+            const relativePath = path.relative(path.join(__dirname, 'public'), fullPath);
+            videos.push({
+              name: file,
+              path: '/' + relativePath.replace(/\\/g, '/')
+            });
+          }
+        }
+      });
+    } catch (err) {
+      console.error('[ENTERTAINING] Error scanning directory:', err);
     }
-  } catch (err) {
-    console.error('[ENTERTAINING] Error scanning videos:', err);
   }
   
-  return videos;
+  scanDir(vidsPath);
+  entertainState.videos = videos;
+  console.log(`[ENTERTAINING] Scanned ${videos.length} videos from /vids`);
 }
 
 // Scan on startup
-const vidsDir = path.join(__dirname, 'public', 'vids');
-entertainState.videos = scanVideos(vidsDir);
-console.log(`[ENTERTAINING] Scanned ${entertainState.videos.length} videos from /vids`);
+scanVideos();
 
 // Routes
 app.get('/api/entertaining/videos', (req, res) => {
   res.json({ videos: entertainState.videos });
 });
 
-app.get('/api/entertaining/state', getUserFromSession, (req, res) => {
-  res.json({
-    enabled: entertainState.enabled,
-    usedVideos: entertainState.usedVideos
-  });
+app.get('/api/entertaining/state', (req, res) => {
+  res.json({ enabled: entertainState.enabled });
 });
 
 app.post('/api/entertaining/state', getUserFromSession, (req, res) => {
   const { enabled } = req.body;
-  
-  if (typeof enabled !== 'undefined') {
-    entertainState.enabled = enabled;
-    console.log(`[ENTERTAINING] ${enabled ? 'Enabled' : 'Disabled'}`);
-  }
-  
+  entertainState.enabled = enabled;
+  console.log(`[ENTERTAINING] ${enabled ? 'Enabled' : 'Disabled'}`);
   res.json({ enabled: entertainState.enabled });
 });
 
-app.post('/api/entertaining/reset-used', getUserFromSession, (req, res) => {
-  entertainState.usedVideos = [];
-  console.log('[ENTERTAINING] Reset used videos');
-  res.json({ success: true });
-});
-
-app.post('/api/entertaining/mark-used', (req, res) => {
-  const { videoPath } = req.body;
-  
-  if (videoPath && !entertainState.usedVideos.includes(videoPath)) {
-    entertainState.usedVideos.push(videoPath);
-    console.log(`[ENTERTAINING] Marked as used: ${videoPath}`);
-  }
-  
-  res.json({ success: true });
-});
-
-app.get('/api/entertaining/public', (req, res) => {
-  res.json({
-    enabled: entertainState.enabled,
-    videos: entertainState.videos,
-    usedVideos: entertainState.usedVideos
-  });
+app.post('/api/entertaining/rescan', getUserFromSession, (req, res) => {
+  scanVideos();
+  res.json({ videos: entertainState.videos });
 });
   </script>
 </head>
-<body style="background: #1a1a1a; color: white; font-family: Arial; padding: 50px; text-align: center;">
-  <h1>🎬 Entertaining Countdown Addon</h1>
-  <p>This addon is active and provides video playback integrated into the timer countdown.</p>
-  <p style="opacity: 0.7; margin-top: 20px;">No separate overlay needed - entertainment is integrated into countdown.html</p>
-  <p style="opacity: 0.5; margin-top: 40px; font-size: 12px;">Module Type: Addon | Priority: 0</p>
+<body>
+  <div style="color: white; text-align: center; padding: 50px; font-family: Arial;">
+    <h1>🎬 Entertaining Countdown Addon</h1>
+    <p>Priority: 0 (Addon - No UI)</p>
+    <p>This module provides video entertainment during countdown breaks.</p>
+    <p style="margin-top: 30px; opacity: 0.7;">Server routes active at /api/entertaining/*</p>
+  </div>
 </body>
 </html>
