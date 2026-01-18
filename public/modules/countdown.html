@@ -823,24 +823,21 @@ return {
       align-items: center;
       text-align: center;
       padding: 40px;
-      transition: all 2s ease-in-out, top 2s ease-in-out, left 2s ease-in-out, transform 2s ease-in-out;
+      transition: all 2s ease-in-out;
       z-index: 10;
-      will-change: top, left, transform;
     }
     
     .countdown-container.large {
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: auto;
     }
     
     .countdown-container.small {
-      top: auto;
       bottom: 20px;
       left: 20px;
-      transform: translate(0, 0);
-      width: auto;
+      transform: none;
+      top: auto;
     }
     
     .countdown-time {
@@ -856,7 +853,7 @@ return {
     }
     
     .countdown-container.large .countdown-time {
-      font-size: 110px;
+      font-size: 120px;
       margin-bottom: 20px;
     }
     
@@ -874,8 +871,8 @@ return {
     }
     
     .countdown-container.large .countdown-bar {
-      width: 550px;
-      height: 18px;
+      width: 600px;
+      height: 20px;
       margin-bottom: 20px;
     }
     
@@ -898,7 +895,7 @@ return {
     }
     
     .countdown-container.large .countdown-end {
-      font-size: 22px;
+      font-size: 24px;
     }
     
     .countdown-container.small .countdown-end {
@@ -906,7 +903,7 @@ return {
     }
     
     .countdown-message {
-      font-size: 65px;
+      font-size: 72px;
       color: white;
       font-weight: bold;
       text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
@@ -959,17 +956,11 @@ return {
       background: black;
       z-index: 5;
       opacity: 0;
-      transition: opacity 2s ease-in-out, volume 2s ease-in-out;
-      display: none;
+      transition: opacity 2s ease-in-out;
     }
     
     #entertainment-video.visible {
       opacity: 1;
-      display: block;
-    }
-    
-    #entertainment-video.fading-out {
-      opacity: 0;
     }
   </style>
 </head>
@@ -1037,67 +1028,12 @@ return {
     // Timer Control API
     window.entertainmentTimerControl = {
       makeTimerLarge: function() {
-        // Remove small class first, then add large
-        // This prevents position jumping
-        const wasSmall = countdownContainer.classList.contains('small');
-        
-        if (wasSmall) {
-          // Get current computed position before change
-          const rect = countdownContainer.getBoundingClientRect();
-          const currentTop = rect.top;
-          const currentLeft = rect.left;
-          
-          // Apply current position as inline style temporarily
-          countdownContainer.style.top = currentTop + 'px';
-          countdownContainer.style.left = currentLeft + 'px';
-          countdownContainer.style.transform = 'none';
-          
-          // Force reflow
-          countdownContainer.offsetHeight;
-          
-          // Remove inline styles and let CSS take over
-          requestAnimationFrame(() => {
-            countdownContainer.style.top = '';
-            countdownContainer.style.left = '';
-            countdownContainer.style.transform = '';
-            countdownContainer.classList.remove('small');
-            countdownContainer.classList.add('large');
-          });
-        } else {
-          countdownContainer.classList.remove('small');
-          countdownContainer.classList.add('large');
-        }
+        countdownContainer.classList.remove('small');
+        countdownContainer.classList.add('large');
       },
       makeTimerSmall: function() {
-        // Remove large class first, then add small
-        const wasLarge = countdownContainer.classList.contains('large');
-        
-        if (wasLarge) {
-          // Get current computed position before change
-          const rect = countdownContainer.getBoundingClientRect();
-          const currentTop = rect.top;
-          const currentLeft = rect.left;
-          
-          // Apply current position as inline style temporarily
-          countdownContainer.style.top = currentTop + 'px';
-          countdownContainer.style.left = currentLeft + 'px';
-          countdownContainer.style.transform = 'none';
-          
-          // Force reflow
-          countdownContainer.offsetHeight;
-          
-          // Remove inline styles and let CSS take over
-          requestAnimationFrame(() => {
-            countdownContainer.style.top = '';
-            countdownContainer.style.left = '';
-            countdownContainer.style.transform = '';
-            countdownContainer.classList.remove('large');
-            countdownContainer.classList.add('small');
-          });
-        } else {
-          countdownContainer.classList.remove('large');
-          countdownContainer.classList.add('small');
-        }
+        countdownContainer.classList.remove('large');
+        countdownContainer.classList.add('small');
       }
     };
     
@@ -1229,57 +1165,38 @@ return {
       return playlist;
     }
     
-    // Stop video with fade (visual and audio)
-    async function stopVideoWithFade() {
-      if (videoEl.style.display === 'none') return;
-      
+    // Play video with fade
+    async function playVideo(videoPath) {
       return new Promise((resolve) => {
-        console.log('[ENTERTAIN] Stopping video with fade...');
+        videoEl.src = videoPath;
+        videoEl.classList.remove('hidden');
         
-        // Fade out visual
-        videoEl.classList.add('fading-out');
+        setTimeout(() => {
+          videoEl.classList.add('visible');
+        }, 50);
+        
+        videoEl.play().catch(err => {
+          console.error('[ENTERTAIN] Play error:', err);
+        });
+        
+        videoEl.onended = () => {
+          resolve();
+        };
+      });
+    }
+    
+    // Stop video with fade
+    async function stopVideo() {
+      return new Promise((resolve) => {
         videoEl.classList.remove('visible');
-        
-        // Fade out audio over 2 seconds
-        fadeVolume(videoEl.volume, 0, 2000);
         
         setTimeout(() => {
           videoEl.pause();
           videoEl.src = '';
-          videoEl.style.display = 'none';
-          videoEl.volume = 1;
-          videoEl.classList.remove('fading-out');
-          console.log('[ENTERTAIN] Video stopped');
+          videoEl.classList.add('hidden');
           resolve();
         }, 2000);
       });
-    }
-    
-    // Fade volume smoothly
-    function fadeVolume(startVol, endVol, duration) {
-      const startTime = Date.now();
-      const volumeDiff = endVol - startVol;
-      
-      function updateVolume() {
-        if (videoEl.paused && videoEl.src === '') return; // Video was stopped
-        
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        const currentVol = startVol + (volumeDiff * progress);
-        videoEl.volume = Math.max(0, Math.min(1, currentVol));
-        
-        if (progress < 1) {
-          requestAnimationFrame(updateVolume);
-        }
-      }
-      
-      updateVolume();
-    }
-    
-    // Stop video (legacy - used by reset)
-    async function stopVideo() {
-      return stopVideoWithFade();
     }
     
     // Entertainment Loop
@@ -1299,150 +1216,76 @@ return {
         currentPlaylist = createPlaylist(timer.duration);
         currentVideoIndex = 0;
         
-        console.log('[ENTERTAIN] Phase 1: Show timer large for 10 seconds (NO VIDEO)');
-        
-        // Show timer large for 10 seconds (NO VIDEO YET)
+        // Show timer large for 10 seconds
         window.entertainmentTimerControl.makeTimerLarge();
         
         setTimeout(async () => {
-          // After 10 seconds, check if we have videos
+          window.entertainmentTimerControl.makeTimerSmall();
+          
           if (currentPlaylist.length > 0) {
-            console.log('[ENTERTAIN] Phase 2: Starting video transitions...');
-            await startVideoSequence();
-          } else {
-            // No videos available, just keep timer large
-            console.log('[ENTERTAIN] No videos to play, keeping timer large');
+            await playNextVideo();
           }
         }, 10000);
         
         return;
       }
       
-      // Check if current video ended naturally
-      if (entertainmentActive && !videoTransitioning && currentVideoIndex > 0 && currentVideoIndex < currentPlaylist.length) {
-        // Check if video has ended
-        if (videoEl.paused && videoEl.currentTime > 0 && videoEl.duration > 0 && Math.abs(videoEl.currentTime - videoEl.duration) < 1) {
-          console.log('[ENTERTAIN] Video ended naturally, playing next...');
-          await playNextInSequence();
+      // Check if video ended and play next
+      if (entertainmentActive && !videoTransitioning && videoEl.paused && currentVideoIndex < currentPlaylist.length) {
+        const elapsed = Math.floor((Date.now() - timerStartTime) / 1000);
+        const remaining = timer.duration - elapsed;
+        
+        if (remaining > 15) {
+          await playNextVideo();
         }
       }
       
       // Last 10 seconds - show timer large
       if (entertainmentActive && timer.remaining <= 10 && timer.remaining > 0) {
-        if (videoEl.style.display !== 'none' && !videoTransitioning) {
-          console.log('[ENTERTAIN] Last 10 seconds, stopping video');
-          await stopVideoWithFade();
-          window.entertainmentTimerControl.makeTimerLarge();
+        if (!videoEl.classList.contains('hidden')) {
+          await stopVideo();
         }
-      }
-      
-      // All videos played, show normal countdown
-      if (entertainmentActive && currentVideoIndex >= currentPlaylist.length && videoEl.style.display === 'none') {
         window.entertainmentTimerControl.makeTimerLarge();
       }
     }
     
-    // Start the video sequence (first video)
-    async function startVideoSequence() {
+    // Play next video in playlist
+    async function playNextVideo() {
       if (currentVideoIndex >= currentPlaylist.length) return;
       
       videoTransitioning = true;
       
-      console.log('[ENTERTAIN] Step 1: Make timer small (2s)');
-      window.entertainmentTimerControl.makeTimerSmall();
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      console.log('[ENTERTAIN] Step 2: Make timer large (5s)');
-      window.entertainmentTimerControl.makeTimerLarge();
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
-      console.log('[ENTERTAIN] Step 3: Make timer small + Start video');
-      window.entertainmentTimerControl.makeTimerSmall();
-      
-      // Start playing first video
       const video = currentPlaylist[currentVideoIndex];
-      console.log(`[ENTERTAIN] Playing first video: ${video.name}`);
-      playVideoAsync(video.path);
+      console.log(`[ENTERTAIN] Playing: ${video.name}`);
       
-      currentVideoIndex++;
-      videoTransitioning = false;
-    }
-    
-    // Play next video in sequence
-    async function playNextInSequence() {
-      if (currentVideoIndex >= currentPlaylist.length) {
-        // All videos played
-        console.log('[ENTERTAIN] All videos played, showing timer');
-        await stopVideoWithFade();
+      // Stop current video if playing
+      if (!videoEl.classList.contains('hidden')) {
+        await stopVideo();
         window.entertainmentTimerControl.makeTimerLarge();
-        return;
+        await new Promise(resolve => setTimeout(resolve, 5000));
       }
       
-      videoTransitioning = true;
-      
-      const video = currentPlaylist[currentVideoIndex];
-      console.log(`[ENTERTAIN] Playing next video: ${video.name}`);
-      
-      console.log('[ENTERTAIN] Step 1: Fade out current video (2s)');
-      await stopVideoWithFade();
-      
-      console.log('[ENTERTAIN] Step 2: Show timer large (5s)');
-      window.entertainmentTimerControl.makeTimerLarge();
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
-      console.log('[ENTERTAIN] Step 3: Make timer small + Start next video');
+      // Play next video
       window.entertainmentTimerControl.makeTimerSmall();
-      
-      // Start next video
-      playVideoAsync(video.path);
+      await playVideo(video.path);
       
       currentVideoIndex++;
       videoTransitioning = false;
-    }
-    
-    // Play video asynchronously (don't wait for it to end)
-    function playVideoAsync(videoPath) {
-      videoEl.src = videoPath;
-      videoEl.style.display = 'block';
-      videoEl.volume = 0;
-      videoEl.classList.remove('visible');
-      videoEl.classList.remove('fading-out');
-      videoEl.load();
-      
-      // Start playing with fade in
-      videoEl.play().then(() => {
-        console.log('[ENTERTAIN] Video started:', videoPath);
-        
-        // Fade in video AND audio over 2 seconds
-        setTimeout(() => {
-          videoEl.classList.add('visible');
-          fadeVolume(0, 1, 2000);
-        }, 50);
-        
-      }).catch(err => {
-        console.error('[ENTERTAIN] Play error:', err);
-      });
     }
     
     // Reset entertainment state
     async function reset() {
       console.log('[ENTERTAIN] Reset');
-      
-      // Fade out video smoothly if playing
-      if (videoEl.style.display !== 'none') {
-        await stopVideoWithFade();
-      }
-      
-      // Smoothly make timer large
-      window.entertainmentTimerControl.makeTimerLarge();
-      
-      // Wait for animation to complete
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
       entertainmentActive = false;
       currentPlaylist = [];
       currentVideoIndex = 0;
       videoTransitioning = false;
+      
+      if (!videoEl.classList.contains('hidden')) {
+        await stopVideo();
+      }
+      
+      window.entertainmentTimerControl.makeTimerLarge();
     }
     
     // Update Timer Display
