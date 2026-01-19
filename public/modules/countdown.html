@@ -835,8 +835,8 @@ return {
     
     .countdown-container.small {
       top: auto;
-      bottom: 20px;
-      left: 20px;
+      bottom: 30px;
+      left: 30px;
       transform: translate(0, 0);
     }
     
@@ -1357,11 +1357,15 @@ return {
       const percent = (timer.remaining / timer.duration) * 100;
       barEl.style.width = `${percent}%`;
       
-      if (timer.endTime) {
+      if (timer.endTime && !timer.isPaused) {
         const date = new Date(timer.endTime);
         const hours = date.getHours().toString().padStart(2, '0');
         const minutes = date.getMinutes().toString().padStart(2, '0');
         endEl.textContent = `${texts[currentLang].around} ${hours}:${minutes} ${texts[currentLang].clock}`;
+      } else if (timer.isPaused) {
+        endEl.textContent = 'Paused';
+      } else {
+        endEl.textContent = 'Around --:--';
       }
     }
     
@@ -1372,6 +1376,13 @@ return {
         const timer = await res.json();
         
         currentLang = timer.language || 'en';
+        
+        // Prevent glitch: Only update timer state if it actually changed
+        const stateChanged = !currentTimerState || 
+                            currentTimerState.isRunning !== timer.isRunning ||
+                            currentTimerState.isPaused !== timer.isPaused ||
+                            Math.abs(currentTimerState.remaining - timer.remaining) > 2;
+        
         currentTimerState = timer;
         
         // Run entertainment loop if enabled
@@ -1379,7 +1390,7 @@ return {
           await entertainmentLoop(timer);
         }
         
-        // Normal countdown mode (or small timer during entertainment)
+        // Update timer display
         if (timer.isRunning && timer.remaining > 0) {
           updateTimerDisplay(timer);
           
@@ -1442,8 +1453,8 @@ return {
           }
         }
         
-        // Detect reset (timer restarted)
-        if (lastTimerRemaining > timer.remaining + 5 && entertainmentEnabled) {
+        // Detect reset (timer restarted) - only if state changed significantly
+        if (stateChanged && lastTimerRemaining > timer.remaining + 5 && entertainmentEnabled) {
           console.log('[ENTERTAIN] Reset detected');
           await reset();
         }
