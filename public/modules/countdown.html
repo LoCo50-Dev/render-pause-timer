@@ -1174,13 +1174,18 @@ return {
     // Play video with fade in (last 2 seconds)
     async function playVideo(videoPath) {
       return new Promise((resolve) => {
+        console.log('[ENTERTAIN] Loading video:', videoPath);
         videoEl.src = videoPath;
         videoEl.classList.remove('hidden');
+        videoEl.classList.remove('fade-out');
         videoEl.currentTime = 0;
+        
+        let fadeOutTriggered = false;
         
         // Start playing immediately (no opacity)
         videoEl.play().catch(err => {
           console.error('[ENTERTAIN] Play error:', err);
+          resolve();
         });
         
         // Fade in over 2 seconds
@@ -1190,9 +1195,15 @@ return {
         
         // Monitor for last 2 seconds to fade out
         const checkTime = setInterval(() => {
+          if (videoEl.paused || videoEl.ended) {
+            clearInterval(checkTime);
+            return;
+          }
+          
           const remaining = videoEl.duration - videoEl.currentTime;
           
-          if (remaining <= 2 && !videoEl.classList.contains('fade-out')) {
+          if (remaining <= 2 && !fadeOutTriggered) {
+            fadeOutTriggered = true;
             console.log('[ENTERTAIN] Video ending in 2s, fading out...');
             videoEl.classList.remove('fade-in');
             videoEl.classList.add('fade-out');
@@ -1203,6 +1214,15 @@ return {
         }, 100);
         
         videoEl.onended = () => {
+          console.log('[ENTERTAIN] Video ended');
+          clearInterval(checkTime);
+          videoEl.classList.remove('fade-in');
+          videoEl.classList.remove('fade-out');
+          resolve();
+        };
+        
+        videoEl.onerror = () => {
+          console.error('[ENTERTAIN] Video error');
           clearInterval(checkTime);
           resolve();
         };
@@ -1234,39 +1254,43 @@ return {
         return;
       }
       
-      // Timer just started
+      // Timer just started - wait 5 seconds
       if (!entertainmentActive && timer.remaining === timer.duration) {
-        console.log('[ENTERTAIN] Starting...');
+        console.log('[ENTERTAIN] Starting... waiting 5 seconds');
         entertainmentActive = true;
         timerStartTime = Date.now();
         currentPlaylist = createPlaylist(timer.duration);
         currentVideoIndex = 0;
         
-        // Show timer large for 5 seconds before first video
+        // Show timer large for 5 seconds
         window.entertainmentTimerControl.makeTimerLarge();
-        
-        setTimeout(async () => {
-          if (currentPlaylist.length > 0) {
-            await playNextVideo();
-          }
-        }, 5000);
-        
         return;
       }
       
-      // Check if video ended and play next
-      if (entertainmentActive && !videoTransitioning && videoEl.paused && currentVideoIndex < currentPlaylist.length) {
-        const elapsed = Math.floor((Date.now() - timerStartTime) / 1000);
-        const remaining = timer.duration - elapsed;
+      // After 5 seconds, start first video
+      const elapsed = Math.floor((Date.now() - timerStartTime) / 1000);
+      if (entertainmentActive && elapsed >= 5 && currentVideoIndex === 0 && videoEl.classList.contains('hidden')) {
+        console.log('[ENTERTAIN] 5 seconds elapsed, starting first video');
+        if (currentPlaylist.length > 0) {
+          await playNextVideo();
+        }
+        return;
+      }
+      
+      // Check if video ended naturally and play next
+      if (entertainmentActive && !videoTransitioning && videoEl.ended && currentVideoIndex < currentPlaylist.length) {
+        const remaining = timer.remaining;
         
         if (remaining > 15) {
+          console.log('[ENTERTAIN] Video ended naturally, playing next');
           await playNextVideo();
         }
       }
       
       // Last 10 seconds - show timer large
       if (entertainmentActive && timer.remaining <= 10 && timer.remaining > 0) {
-        if (!videoEl.classList.contains('hidden')) {
+        if (!videoEl.classList.contains('hidden') && !videoEl.classList.contains('fade-out')) {
+          console.log('[ENTERTAIN] Last 10 seconds, stopping video');
           await stopVideo();
         }
         window.entertainmentTimerControl.makeTimerLarge();
@@ -1275,26 +1299,38 @@ return {
     
     // Play next video in playlist
     async function playNextVideo() {
-      if (currentVideoIndex >= currentPlaylist.length) return;
+      if (currentVideoIndex >= currentPlaylist.length) {
+        console.log('[ENTERTAIN] No more videos in playlist');
+        return;
+      }
+      
+      if (videoTransitioning) {
+        console.log('[ENTERTAIN] Already transitioning, skipping');
+        return;
+      }
       
       videoTransitioning = true;
       
       const video = currentPlaylist[currentVideoIndex];
-      console.log(`[ENTERTAIN] Playing: ${video.name}`);
+      console.log(`[ENTERTAIN] Playing video ${currentVideoIndex + 1}/${currentPlaylist.length}: ${video.name}`);
       
       // Stop current video if playing
       if (!videoEl.classList.contains('hidden')) {
+        console.log('[ENTERTAIN] Stopping current video');
         await stopVideo();
         // Timer is already large from fade-out, wait 2 seconds
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
       
+      // Increment index BEFORE playing to prevent duplicate plays
+      currentVideoIndex++;
+      
       // Make timer small and start video with fade-in (2s)
       window.entertainmentTimerControl.makeTimerSmall();
       await playVideo(video.path);
       
-      currentVideoIndex++;
       videoTransitioning = false;
+      console.log('[ENTERTAIN] Video finished playing');
     }
     
     // Reset entertainment state
