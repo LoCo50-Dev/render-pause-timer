@@ -823,7 +823,7 @@ return {
       align-items: center;
       text-align: center;
       padding: 40px;
-      transition: all 2s ease-in-out;
+      transition: top 2s linear, left 2s linear, transform 2s linear;
       z-index: 10;
     }
     
@@ -834,10 +834,10 @@ return {
     }
     
     .countdown-container.small {
+      top: auto;
       bottom: 20px;
       left: 20px;
-      transform: none;
-      top: auto;
+      transform: translate(0, 0);
     }
     
     .countdown-time {
@@ -956,11 +956,17 @@ return {
       background: black;
       z-index: 5;
       opacity: 0;
-      transition: opacity 2s ease-in-out;
+      transition: opacity 0s;
     }
     
-    #entertainment-video.visible {
+    #entertainment-video.fade-in {
+      transition: opacity 2s ease-in-out;
       opacity: 1;
+    }
+    
+    #entertainment-video.fade-out {
+      transition: opacity 2s ease-in-out;
+      opacity: 0;
     }
   </style>
 </head>
@@ -1118,9 +1124,9 @@ return {
     
     // Create playlist for timer duration
     function createPlaylist(timerDuration) {
-      const START_BUFFER = 10;
-      const END_BUFFER = 10;
-      const TRANSITION_TIME = 10;
+      const START_BUFFER = 5;  // 5 seconds at start
+      const END_BUFFER = 10;   // 10 seconds at end
+      const TRANSITION_TIME = 4; // 2s fade out + 2s pause
       
       let availableTime = timerDuration - START_BUFFER - END_BUFFER;
       
@@ -1165,34 +1171,54 @@ return {
       return playlist;
     }
     
-    // Play video with fade
+    // Play video with fade in (last 2 seconds)
     async function playVideo(videoPath) {
       return new Promise((resolve) => {
         videoEl.src = videoPath;
         videoEl.classList.remove('hidden');
+        videoEl.currentTime = 0;
         
-        setTimeout(() => {
-          videoEl.classList.add('visible');
-        }, 50);
-        
+        // Start playing immediately (no opacity)
         videoEl.play().catch(err => {
           console.error('[ENTERTAIN] Play error:', err);
         });
         
+        // Fade in over 2 seconds
+        setTimeout(() => {
+          videoEl.classList.add('fade-in');
+        }, 50);
+        
+        // Monitor for last 2 seconds to fade out
+        const checkTime = setInterval(() => {
+          const remaining = videoEl.duration - videoEl.currentTime;
+          
+          if (remaining <= 2 && !videoEl.classList.contains('fade-out')) {
+            console.log('[ENTERTAIN] Video ending in 2s, fading out...');
+            videoEl.classList.remove('fade-in');
+            videoEl.classList.add('fade-out');
+            
+            // Make timer large during fade out
+            window.entertainmentTimerControl.makeTimerLarge();
+          }
+        }, 100);
+        
         videoEl.onended = () => {
+          clearInterval(checkTime);
           resolve();
         };
       });
     }
     
-    // Stop video with fade
+    // Stop video immediately
     async function stopVideo() {
       return new Promise((resolve) => {
-        videoEl.classList.remove('visible');
+        videoEl.classList.remove('fade-in');
+        videoEl.classList.add('fade-out');
         
         setTimeout(() => {
           videoEl.pause();
           videoEl.src = '';
+          videoEl.classList.remove('fade-out');
           videoEl.classList.add('hidden');
           resolve();
         }, 2000);
@@ -1216,16 +1242,14 @@ return {
         currentPlaylist = createPlaylist(timer.duration);
         currentVideoIndex = 0;
         
-        // Show timer large for 10 seconds
+        // Show timer large for 5 seconds before first video
         window.entertainmentTimerControl.makeTimerLarge();
         
         setTimeout(async () => {
-          window.entertainmentTimerControl.makeTimerSmall();
-          
           if (currentPlaylist.length > 0) {
             await playNextVideo();
           }
-        }, 10000);
+        }, 5000);
         
         return;
       }
@@ -1261,11 +1285,11 @@ return {
       // Stop current video if playing
       if (!videoEl.classList.contains('hidden')) {
         await stopVideo();
-        window.entertainmentTimerControl.makeTimerLarge();
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        // Timer is already large from fade-out, wait 2 seconds
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
       
-      // Play next video
+      // Make timer small and start video with fade-in (2s)
       window.entertainmentTimerControl.makeTimerSmall();
       await playVideo(video.path);
       
