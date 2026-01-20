@@ -1030,9 +1030,6 @@ return {
     let entertainmentActive = false;
     let timerStartTime = 0;
     let videoTransitioning = false;
-    let localTimerSeconds = 0;
-    let localTimerDuration = 0;
-    let localTimerInterval = null;
     
     // Timer Control API
     window.entertainmentTimerControl = {
@@ -1265,17 +1262,9 @@ return {
         currentPlaylist = createPlaylist(timer.duration);
         currentVideoIndex = 0;
         
-        // Start local timer to avoid glitches
-        startLocalTimer(timer.duration, timer.remaining);
-        
         // Show timer large for 5 seconds
         window.entertainmentTimerControl.makeTimerLarge();
         return;
-      }
-      
-      // Sync local timer with server occasionally (every 5 seconds)
-      if (entertainmentActive && Math.floor(timer.remaining % 5) === 0 && localTimerSeconds !== timer.remaining) {
-        localTimerSeconds = timer.remaining;
       }
       
       // After 5 seconds, start first video
@@ -1351,7 +1340,6 @@ return {
       currentPlaylist = [];
       currentVideoIndex = 0;
       videoTransitioning = false;
-      stopLocalTimer();
       
       if (!videoEl.classList.contains('hidden')) {
         await stopVideo();
@@ -1360,7 +1348,7 @@ return {
       window.entertainmentTimerControl.makeTimerLarge();
     }
     
-    // Update Timer Display (local - no glitches)
+    // Update Timer Display
     function updateTimerDisplay(timer) {
       const mins = Math.floor(timer.remaining / 60);
       const secs = timer.remaining % 60;
@@ -1381,40 +1369,6 @@ return {
       }
     }
     
-    // Update Timer Display (local countdown)
-    function updateLocalTimerDisplay() {
-      if (localTimerSeconds <= 0) {
-        stopLocalTimer();
-        return;
-      }
-      
-      const mins = Math.floor(localTimerSeconds / 60);
-      const secs = localTimerSeconds % 60;
-      timeEl.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-      
-      const percent = (localTimerSeconds / localTimerDuration) * 100;
-      barEl.style.width = `${percent}%`;
-      
-      localTimerSeconds--;
-    }
-    
-    // Start local timer (no API calls)
-    function startLocalTimer(duration, remaining) {
-      stopLocalTimer();
-      localTimerDuration = duration;
-      localTimerSeconds = remaining;
-      localTimerInterval = setInterval(updateLocalTimerDisplay, 1000);
-      updateLocalTimerDisplay();
-    }
-    
-    // Stop local timer
-    function stopLocalTimer() {
-      if (localTimerInterval) {
-        clearInterval(localTimerInterval);
-        localTimerInterval = null;
-      }
-    }
-    
     // Normal Countdown Update
     async function updateCountdown() {
       try {
@@ -1422,79 +1376,85 @@ return {
         const timer = await res.json();
         
         currentLang = timer.language || 'en';
+        
+        // Prevent glitch: Only update timer state if it actually changed
+        const stateChanged = !currentTimerState || 
+                            currentTimerState.isRunning !== timer.isRunning ||
+                            currentTimerState.isPaused !== timer.isPaused ||
+                            Math.abs(currentTimerState.remaining - timer.remaining) > 2;
+        
         currentTimerState = timer;
         
         // Run entertainment loop if enabled
         if (entertainmentEnabled) {
           await entertainmentLoop(timer);
-          // Don't update display here - local timer handles it
+        }
+        
+        // Update timer display
+        if (timer.isRunning && timer.remaining > 0) {
+          updateTimerDisplay(timer);
+          
+          timeEl.classList.remove('hidden');
+          endEl.classList.remove('hidden');
+          messageEl.classList.add('hidden');
+          skippedEl.classList.add('hidden');
+          messageShownAt = null;
+          skippedShownAt = null;
         } else {
-          // Normal mode - update from API
-          if (timer.isRunning && timer.remaining > 0) {
-            updateTimerDisplay(timer);
+          timeEl.classList.add('hidden');
+          barEl.style.width = '0%';
+          
+          if (timer.wasSkipped) {
+            messageEl.textContent = texts[currentLang].starting;
+            messageEl.classList.remove('hidden');
             
-            timeEl.classList.remove('hidden');
-            endEl.classList.remove('hidden');
-            messageEl.classList.add('hidden');
-            skippedEl.classList.add('hidden');
-            messageShownAt = null;
-            skippedShownAt = null;
-          } else {
-            timeEl.classList.add('hidden');
-            barEl.style.width = '0%';
-            
-            if (timer.wasSkipped) {
-              messageEl.textContent = texts[currentLang].starting;
-              messageEl.classList.remove('hidden');
-              
-              if (messageShownAt === null) {
-                messageShownAt = Date.now();
-              }
-              
-              const messageElapsed = Date.now() - messageShownAt;
-              if (messageElapsed > 5000) {
-                messageEl.classList.add('stop-pulse');
-              } else {
-                messageEl.classList.remove('stop-pulse');
-              }
-              
-              skippedEl.textContent = texts[currentLang].skipped;
-              skippedEl.classList.remove('hidden');
-              endEl.classList.add('hidden');
-              
-              if (skippedShownAt === null) {
-                skippedShownAt = Date.now();
-              }
-              
-              const skippedElapsed = Date.now() - skippedShownAt;
-              if (skippedElapsed > 5000) {
-                skippedEl.classList.add('stop-pulse');
-              } else {
-                skippedEl.classList.remove('stop-pulse');
-              }
-            } else {
-              messageEl.textContent = texts[currentLang].starting;
-              messageEl.classList.remove('hidden');
-              
-              if (messageShownAt === null) {
-                messageShownAt = Date.now();
-              }
-              
-              const messageElapsed = Date.now() - messageShownAt;
-              if (messageElapsed > 5000) {
-                messageEl.classList.add('stop-pulse');
-              } else {
-                messageEl.classList.remove('stop-pulse');
-              }
-              
-              skippedEl.classList.add('hidden');
-              endEl.classList.add('hidden');
+            if (messageShownAt === null) {
+              messageShownAt = Date.now();
             }
+            
+            const messageElapsed = Date.now() - messageShownAt;
+            if (messageElapsed > 5000) {
+              messageEl.classList.add('stop-pulse');
+            } else {
+              messageEl.classList.remove('stop-pulse');
+            }
+            
+            skippedEl.textContent = texts[currentLang].skipped;
+            skippedEl.classList.remove('hidden');
+            endEl.classList.add('hidden');
+            
+            if (skippedShownAt === null) {
+              skippedShownAt = Date.now();
+            }
+            
+            const skippedElapsed = Date.now() - skippedShownAt;
+            if (skippedElapsed > 5000) {
+              skippedEl.classList.add('stop-pulse');
+            } else {
+              skippedEl.classList.remove('stop-pulse');
+            }
+          } else {
+            messageEl.textContent = texts[currentLang].starting;
+            messageEl.classList.remove('hidden');
+            
+            if (messageShownAt === null) {
+              messageShownAt = Date.now();
+            }
+            
+            const messageElapsed = Date.now() - messageShownAt;
+            if (messageElapsed > 5000) {
+              messageEl.classList.add('stop-pulse');
+            } else {
+              messageEl.classList.remove('stop-pulse');
+            }
+            
+            skippedEl.classList.add('hidden');
+            endEl.classList.add('hidden');
           }
         }
         
-        // Detect reset (timer restarted)
-        if (lastTimerRemaining > timer.remaining + 5 && entertainmentEnabled) {
+        // Detect reset (timer restarted) - only if state changed significantly
+        if (stateChanged && lastTimerRemaining > timer.remaining + 5 && entertainmentEnabled) {
           console.log('[ENTERTAIN] Reset detected');
           await reset();
         }
