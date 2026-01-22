@@ -622,24 +622,30 @@
     
     async function checkDeploymentStatus() {
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        
         const res = await fetch(`${API_URL}/api/instance/info`, {
-          method: 'HEAD',
-          cache: 'no-cache'
+          method: 'GET',
+          cache: 'no-cache',
+          signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         
         // Server erreichbar
         if (isDeploying) {
-          console.log('[DEPLOY] Deployment finished, server is back online');
+          console.log('[DEPLOY] ✅ Deployment finished, server is back online');
           isDeploying = false;
           refreshButton.classList.remove('loading', 'disabled');
-          refreshButton.title = 'Refresh all modules - Click to reload after deployment';
+          refreshButton.title = 'Refresh all modules';
         }
         
         return true;
       } catch (err) {
         // Server nicht erreichbar = Deployment
         if (!isDeploying) {
-          console.log('[DEPLOY] Deployment detected, server is updating...');
+          console.log('[DEPLOY] 🔄 Deployment detected, server is updating...');
           isDeploying = true;
           refreshButton.classList.add('loading', 'disabled');
           refreshButton.title = 'Deployment in progress... Please wait';
