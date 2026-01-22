@@ -636,12 +636,13 @@
       moduleChoicesContainer.innerHTML = '';
       moduleChoicesContainer.classList.add('hidden');
       pendingConflicts = [];
+      moduleChoices = {};
       
       // Wait for animation
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Reload modules
-      await loadModules();
+      // Reload modules with cache bypass
+      await loadModules(true);
       
       refreshButton.classList.remove('spinning');
       
@@ -917,10 +918,13 @@
     
     // ========== MODULE LOADER ==========
     
-    async function loadModules() {
+    async function loadModules(bypassCache = false) {
       try {
         console.log('[MODULE LOADER] Fetching module list...');
-        const res = await fetch(`${API_URL}/api/modules/list`);
+        
+        // Add cache bypass parameter
+        const cacheParam = bypassCache ? `?_=${Date.now()}` : '';
+        const res = await fetch(`${API_URL}/api/modules/list${cacheParam}`);
         const data = await res.json();
         
         console.log('[MODULE LOADER] Modules:', data.modules);
@@ -975,7 +979,9 @@
     
     async function loadSelectedModules() {
       try {
-        const res = await fetch(`${API_URL}/api/modules/list`);
+        // Add cache bypass
+        const cacheParam = `?_=${Date.now()}`;
+        const res = await fetch(`${API_URL}/api/modules/list${cacheParam}`);
         const data = await res.json();
         
         const modulesWithUI = data.modules.filter(m => 
@@ -1030,7 +1036,9 @@
       try {
         console.log(`[MODULE LOADER] Loading ${moduleInfo.name}...`);
         
-        const res = await fetch(`${API_URL}/api/modules/${moduleInfo.id}`);
+        // Add cache bypass to force fresh code
+        const cacheParam = `?_=${Date.now()}`;
+        const res = await fetch(`${API_URL}/api/modules/${moduleInfo.id}${cacheParam}`);
         const moduleData = await res.json();
         
         if (!moduleData.controllerCode) {
