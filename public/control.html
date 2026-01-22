@@ -506,10 +506,7 @@
 
   <!-- ========== REFRESH BUTTON ========== -->
   <button class="refresh-button hidden" id="refreshButton" title="Refresh all modules">
-    <span class="refresh-button-emoji">🔄</span>
-    <img src="https://substackcdn.com/image/fetch/w_120,h_120,c_fill,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F73340b5b-8149-4344-8279-075357e2dcf7_720x720.gif" 
-         class="refresh-button-gif" 
-         alt="Loading">
+    <div class="refresh-button-content" id="refreshButtonContent">🔄</div>
   </button>
 
   <!-- ========== LANGUAGE SELECTOR ========== -->
@@ -553,6 +550,7 @@
     const btnGerman = document.getElementById('btn-german');
     const btnEnglish = document.getElementById('btn-english');
     const refreshButton = document.getElementById('refreshButton');
+    const refreshButtonContent = document.getElementById('refreshButtonContent');
     
     // ========== LOCAL STORAGE FUNCTIONS ==========
     
@@ -639,6 +637,7 @@
           isDeploying = false;
           refreshButton.classList.remove('loading', 'disabled');
           refreshButton.title = 'Refresh all modules';
+          refreshButtonContent.innerHTML = '🔄';
         }
         
         return true;
@@ -649,6 +648,7 @@
           isDeploying = true;
           refreshButton.classList.add('loading', 'disabled');
           refreshButton.title = 'Deployment in progress... Please wait';
+          refreshButtonContent.innerHTML = '<img src="https://substackcdn.com/image/fetch/w_120,h_120,c_fill,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F73340b5b-8149-4344-8279-075357e2dcf7_720x720.gif" class="refresh-button-gif" alt="Loading">';
         }
         
         return false;
