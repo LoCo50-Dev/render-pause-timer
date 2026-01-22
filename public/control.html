@@ -506,7 +506,10 @@
 
   <!-- ========== REFRESH BUTTON ========== -->
   <button class="refresh-button hidden" id="refreshButton" title="Refresh all modules">
-    🔄
+    <span class="refresh-button-emoji">🔄</span>
+    <img src="https://substackcdn.com/image/fetch/w_120,h_120,c_fill,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F73340b5b-8149-4344-8279-075357e2dcf7_720x720.gif" 
+         class="refresh-button-gif" 
+         alt="Loading">
   </button>
 
   <!-- ========== LANGUAGE SELECTOR ========== -->
@@ -533,6 +536,8 @@
     let moduleChoices = {};
     let pendingConflicts = [];
     let currentUser = null;
+    let isDeploying = false;
+    let deployCheckInterval = null;
     
     // ========== DOM ELEMENTS ==========
     const loginScreen = document.getElementById('loginScreen');
@@ -613,12 +618,64 @@
       return headers;
     }
     
+    // ========== DEPLOYMENT DETECTION ==========
+    
+    async function checkDeploymentStatus() {
+      try {
+        const res = await fetch(`${API_URL}/api/instance/info`, {
+          method: 'HEAD',
+          cache: 'no-cache'
+        });
+        
+        // Server erreichbar
+        if (isDeploying) {
+          console.log('[DEPLOY] Deployment finished, server is back online');
+          isDeploying = false;
+          refreshButton.classList.remove('loading', 'disabled');
+          refreshButton.title = 'Refresh all modules - Click to reload after deployment';
+        }
+        
+        return true;
+      } catch (err) {
+        // Server nicht erreichbar = Deployment
+        if (!isDeploying) {
+          console.log('[DEPLOY] Deployment detected, server is updating...');
+          isDeploying = true;
+          refreshButton.classList.add('loading', 'disabled');
+          refreshButton.title = 'Deployment in progress... Please wait';
+        }
+        
+        return false;
+      }
+    }
+    
+    function startDeploymentMonitoring() {
+      // Check every 2 seconds
+      deployCheckInterval = setInterval(checkDeploymentStatus, 2000);
+      checkDeploymentStatus(); // Initial check
+    }
+    
+    function stopDeploymentMonitoring() {
+      if (deployCheckInterval) {
+        clearInterval(deployCheckInterval);
+        deployCheckInterval = null;
+      }
+    }
+    
     // ========== REFRESH FUNCTION ==========
     
     async function refreshModules() {
-      console.log('[REFRESH] Reloading all modules...');
+      if (isDeploying) {
+        console.log('[REFRESH] Cannot refresh during deployment');
+        return;
+      }
+      
+      console.log('[REFRESH] Reloading all modules and controller...');
       
       refreshButton.classList.add('spinning');
+      
+      // Stop deployment monitoring during refresh
+      stopDeploymentMonitoring();
       
       // Destroy all loaded modules
       loadedModules.forEach(mod => {
@@ -641,12 +698,9 @@
       // Wait for animation
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Reload modules with cache bypass
-      await loadModules(true);
-      
-      refreshButton.classList.remove('spinning');
-      
-      console.log('[REFRESH] ✅ Modules reloaded');
+      // Full page reload to refresh controller code
+      console.log('[REFRESH] Reloading page...');
+      window.location.reload(true);
     }
     
     refreshButton.addEventListener('click', refreshModules);
@@ -1159,6 +1213,9 @@
       }
       
       loadModules();
+      
+      // Start deployment monitoring
+      startDeploymentMonitoring();
     }
     
     // ========== START APP ==========
